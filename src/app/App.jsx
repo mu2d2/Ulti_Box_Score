@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { RosterPanel } from "../components/RosterPanel";
 import { OnFieldPanel } from "../components/OnFieldPanel";
 import { BoxScoreTable } from "../components/BoxScoreTable";
@@ -22,13 +22,33 @@ function getPlayerIdsForLineup(lineupId, players, lineupMembership) {
 export default function App() {
   const [state, setState] = useState(() => {
     const local = loadGameState();
-    if (local) {
-      return local;
+    if (!local) {
+      return {
+        ...initialState,
+        lineupGroups: DEFAULT_LINEUP_GROUPS,
+      };
     }
 
     return {
       ...initialState,
-      lineupGroups: DEFAULT_LINEUP_GROUPS,
+      ...local,
+      players: Array.isArray(local.players) ? local.players : [],
+      lineupGroups:
+        Array.isArray(local.lineupGroups) && local.lineupGroups.length > 0
+          ? local.lineupGroups
+          : DEFAULT_LINEUP_GROUPS,
+      lineupMembership:
+        local.lineupMembership && typeof local.lineupMembership === "object"
+          ? local.lineupMembership
+          : {},
+      currentOnFieldPlayerIds: Array.isArray(local.currentOnFieldPlayerIds)
+        ? local.currentOnFieldPlayerIds
+        : [],
+      playerPointsPlayed:
+        local.playerPointsPlayed && typeof local.playerPointsPlayed === "object"
+          ? local.playerPointsPlayed
+          : {},
+      statEvents: Array.isArray(local.statEvents) ? local.statEvents : [],
     };
   });
 
@@ -156,7 +176,10 @@ export default function App() {
   return (
     <main className="layout">
       <header className="app-header">
-        <h1>Ultimate Frisbee Box Score Prototype</h1>
+        <div>
+          <h1>Ultimate Frisbee Box Score Prototype</h1>
+          <p>Hello World test: app shell loaded.</p>
+        </div>
         <div className="sync-pill">Pending Sync: {syncQueueSize}</div>
       </header>
 

@@ -1,3 +1,4 @@
+import React from "react";
 export function BoxScoreTable({ rows, activeLineupName }) {
   return (
     <section className="panel">

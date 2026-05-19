@@ -1,3 +1,4 @@
+import React from "react";
 import { STAT_TYPES } from "../models/types";
 
 export function OnFieldPanel({
