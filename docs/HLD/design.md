@@ -64,7 +64,8 @@ A member of the team roster.
 | team | FK → Team | |
 | name | string | |
 | jersey\_number | integer | |
-| position | string | e.g. Handler, Cutter |
+| position | enum | Handler, Cutter, or Hybrid |
+| role | enum | Offense or Defense (default role for the player) |
 | age | integer | optional |
 | match\_player\_type | enum | MMP or WMP |
 

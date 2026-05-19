@@ -5,15 +5,32 @@ The app should be optimized for live, in-game stat entry on a phone or tablet. T
 
 The main live screen should focus on the **7 players currently on the field** and make it easy to update **any stat for any of those players** with a single tap.
 
+The app should have three primary pages:
+- **Roster Entry and List** page
+- **Live Entry** page
+- **Box Score** page
+
+### Live Entry
+The live entry screen should be separate from the box score screen.
+
+Live entry should allow the user to filter available player options by selecting one or more lineup group tabs. Example: if the user selects "Alpha" and "Beta", players from both groups should appear for on-field selection and stat entry.
+
+The expected counting stats to start will be: Goals, Assists, Turnovers, Blocks.
+
+Along with this there should be a simple **large touch button** to increase a player's stat. The button should be easy to hit quickly from the live entry view, without requiring the user to open a separate modal.
+
+For live play, the live entry page should show the players from the selected lineup filter and allow the user to tap the stat button for the correct player and stat combination in one or two touches.
+
+The interface should support quick undo for the most recent stat event so mistakes can be corrected during live entry.
+
+ - Edit existing lineup groups (rename and update selected players)
+Each stat button press should provide immediate visual feedback so the user can confirm the tap was registered.
+
 ### Box Score
 The expected counting stats to start will be: Goals, Assists, Turnovers, Blocks, Points Played.
 These categories should be columns against rows which will be each player's name & jersey number.
 See below figure for an example from a Basketball Boxscore:
 ![alt text](basketball_boxscore.png)
-
-Along with this there should be a simple **large touch button** to increase a player's stat. The button should be easy to hit quickly from the box score table view, without requiring the user to open a separate modal.
-
-For live play, the box score should show the **7 players currently on the field** and allow the user to tap the stat button for the correct player and stat combination in one or two touches.
 
 Similar to this pop up but easy for an user to access from the box score table pov
 ![alt text](GUI_buttons.png)
@@ -22,14 +39,21 @@ There should be different tabbed views on the box score to view different lineup
 
 Points Played should update automatically based on which players are marked as being on the field for a point.
 
-The interface should also support quick undo for the most recent stat event so mistakes can be corrected during live entry.
+The box score page is view-focused and should not be the primary live stat entry screen.
 
 ### Roster Entry
 Separate page should be available for the user to enter Player Name, Jersey number, position, and age to a roster list which then is visually populated as the user types in entries.
 
-Additionally, the user should have the option for creating groupings of different lineups of different players with customizable names. These groupings are what drive the tabbed views in the box score.
+Additionally, the user should have the option for creating groupings of different lineups by selecting players and assigning a custom lineup group name (for example: Alpha, Beta, O-Line 1). These groupings are what drive the tabbed views in the box score.
 
 The roster entry form should also include a simple way to mark each player as MMP (male matching player) or WMP (woman matching player).
+
+The roster list on this page should support inline editing so the user can quickly update player information (name, position, role, jersey number, age, and MMP/WMP) without leaving the list.
+
+The roster page should also include a lineup builder section:
+- Enter lineup group name
+- Select players to include
+- Save the group so it appears as a new tab on the Box Score page
 
 ### Game Setup and Entry
 The user should be able to start a game quickly with only a minimal amount of required information. Opponent, date, location, and tournament details can be filled in later.

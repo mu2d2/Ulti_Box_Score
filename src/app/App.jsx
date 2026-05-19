@@ -15,8 +15,24 @@ function getPlayerIdsForLineup(lineupId, players, lineupMembership) {
   }
 
   return Object.entries(lineupMembership)
-    .filter(([, memberships]) => memberships.includes(lineupId))
+    .filter(([, memberships]) => Array.isArray(memberships) && memberships.includes(lineupId))
     .map(([playerId]) => playerId);
+}
+
+function getPlayerIdsForLineups(lineupIds, players, lineupMembership) {
+  if (lineupIds.includes("lineup-all")) {
+    return players.map((player) => player.id);
+  }
+
+  const merged = new Set();
+  for (const lineupId of lineupIds) {
+    const ids = getPlayerIdsForLineup(lineupId, players, lineupMembership);
+    for (const id of ids) {
+      merged.add(id);
+    }
+  }
+
+  return [...merged];
 }
 
 export default function App() {
@@ -53,6 +69,8 @@ export default function App() {
   });
 
   const [activeLineupId, setActiveLineupId] = useState("lineup-all");
+  const [selectedLiveEntryLineupIds, setSelectedLiveEntryLineupIds] = useState(["lineup-all"]);
+  const [activePage, setActivePage] = useState("box-score");
   const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue().length);
 
   useEffect(() => {
@@ -76,6 +94,129 @@ export default function App() {
     };
 
     updateStateWithQueue(next, { type: "PLAYER_ADDED", payload: player });
+  }
+
+  function updatePlayer(playerId, updates) {
+    const next = {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === playerId ? { ...player, ...updates } : player
+      ),
+    };
+
+    updateStateWithQueue(next, {
+      type: "PLAYER_UPDATED",
+      payload: { playerId, updates },
+    });
+  }
+
+  function createLineupGroup(name, playerIds) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const exists = state.lineupGroups.some(
+      (group) => group.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      return;
+    }
+
+    const lineupId = createId("lineup");
+    const nextMembership = { ...state.lineupMembership };
+
+    for (const player of state.players) {
+      const current = Array.isArray(nextMembership[player.id]) ? nextMembership[player.id] : ["lineup-all"];
+      if (playerIds.includes(player.id) && !current.includes(lineupId)) {
+        nextMembership[player.id] = [...current, lineupId];
+      } else {
+        nextMembership[player.id] = current;
+      }
+    }
+
+    const newGroup = { id: lineupId, name: trimmed };
+    const next = {
+      ...state,
+      lineupGroups: [...state.lineupGroups, newGroup],
+      lineupMembership: nextMembership,
+    };
+
+    updateStateWithQueue(next, {
+      type: "LINEUP_GROUP_CREATED",
+      payload: { lineupGroup: newGroup, playerIds },
+    });
+  }
+
+  function updateLineupGroup(lineupId, name, playerIds) {
+    if (lineupId === "lineup-all") {
+      return;
+    }
+
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const exists = state.lineupGroups.some(
+      (group) => group.id !== lineupId && group.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      return;
+    }
+
+    const nextMembership = { ...state.lineupMembership };
+    for (const player of state.players) {
+      const current = Array.isArray(nextMembership[player.id])
+        ? nextMembership[player.id]
+        : ["lineup-all"];
+
+      const withoutTarget = current.filter((id) => id !== lineupId);
+      nextMembership[player.id] = playerIds.includes(player.id)
+        ? [...withoutTarget, lineupId]
+        : withoutTarget;
+    }
+
+    const next = {
+      ...state,
+      lineupGroups: state.lineupGroups.map((group) =>
+        group.id === lineupId ? { ...group, name: trimmed } : group
+      ),
+      lineupMembership: nextMembership,
+    };
+
+    updateStateWithQueue(next, {
+      type: "LINEUP_GROUP_UPDATED",
+      payload: { lineupId, name: trimmed, playerIds },
+    });
+  }
+
+  function toggleLiveEntryLineupFilter(lineupId) {
+    setSelectedLiveEntryLineupIds((current) => {
+      let nextSelection;
+      if (lineupId === "lineup-all") {
+        nextSelection = ["lineup-all"];
+      } else {
+        const withoutAll = current.filter((id) => id !== "lineup-all");
+        const isSelected = withoutAll.includes(lineupId);
+        const next = isSelected ? withoutAll.filter((id) => id !== lineupId) : [...withoutAll, lineupId];
+
+        nextSelection = next.length === 0 ? ["lineup-all"] : next;
+      }
+
+      const filteredPlayerIds = getPlayerIdsForLineups(
+        nextSelection,
+        state.players,
+        state.lineupMembership
+      );
+
+      setState((prev) => ({
+        ...prev,
+        currentOnFieldPlayerIds: filteredPlayerIds.slice(0, 7),
+      }));
+
+      return nextSelection;
+    });
   }
 
   function toggleOnField(playerId) {
@@ -115,6 +256,36 @@ export default function App() {
     };
 
     updateStateWithQueue(next, { type: "STAT_EVENT_CREATED", payload: event });
+  }
+
+  function decrementStat(playerId, statType) {
+    if (!state.currentOnFieldPlayerIds.includes(playerId)) {
+      return;
+    }
+
+    let targetIndex = -1;
+    for (let i = state.statEvents.length - 1; i >= 0; i -= 1) {
+      const event = state.statEvents[i];
+      if (event.playerId === playerId && event.statType === statType) {
+        targetIndex = i;
+        break;
+      }
+    }
+
+    if (targetIndex === -1) {
+      return;
+    }
+
+    const removedEvent = state.statEvents[targetIndex];
+    const next = {
+      ...state,
+      statEvents: state.statEvents.filter((_, idx) => idx !== targetIndex),
+    };
+
+    updateStateWithQueue(next, {
+      type: "STAT_EVENT_DECREMENTED",
+      payload: { eventId: removedEvent.id, playerId, statType },
+    });
   }
 
   function undoLastEvent() {
@@ -168,10 +339,37 @@ export default function App() {
     [activeLineupId, state.players, state.lineupMembership]
   );
 
+  const liveEntryVisiblePlayerIds = useMemo(
+    () => getPlayerIdsForLineups(selectedLiveEntryLineupIds, state.players, state.lineupMembership),
+    [selectedLiveEntryLineupIds, state.players, state.lineupMembership]
+  );
+
+  const liveEntryPlayers = useMemo(
+    () => state.players.filter((player) => liveEntryVisiblePlayerIds.includes(player.id)),
+    [state.players, liveEntryVisiblePlayerIds]
+  );
+
+  useEffect(() => {
+    const allowed = new Set(liveEntryVisiblePlayerIds);
+    const nextOnField = state.currentOnFieldPlayerIds.filter((id) => allowed.has(id));
+    if (nextOnField.length !== state.currentOnFieldPlayerIds.length) {
+      setState((prev) => ({ ...prev, currentOnFieldPlayerIds: nextOnField }));
+    }
+  }, [liveEntryVisiblePlayerIds, state.currentOnFieldPlayerIds]);
+
   const rows = useMemo(
     () => buildBoxScore(state.players, state.statEvents, state.playerPointsPlayed, visiblePlayerIds),
     [state.players, state.statEvents, state.playerPointsPlayed, visiblePlayerIds]
   );
+
+  const liveEntryStatTotals = useMemo(() => {
+    const totals = {};
+    for (const event of state.statEvents) {
+      const key = `${event.playerId}:${event.statType}`;
+      totals[key] = (totals[key] || 0) + 1;
+    }
+    return totals;
+  }, [state.statEvents]);
 
   return (
     <main className="layout">
@@ -184,33 +382,100 @@ export default function App() {
       </header>
 
       <section className="panel lineup-tabs">
-        <h2>Lineup Tabs</h2>
-        <div className="tab-row">
-          {state.lineupGroups.map((lineup) => (
-            <button
-              key={lineup.id}
-              className={lineup.id === activeLineupId ? "active-tab" : ""}
-              onClick={() => setActiveLineupId(lineup.id)}
-            >
-              {lineup.name}
-            </button>
-          ))}
+        <h2>Pages</h2>
+        <div className="page-nav">
+          <button
+            className={activePage === "roster" ? "active-page" : ""}
+            onClick={() => setActivePage("roster")}
+          >
+            Roster Entry and List
+          </button>
+          <button
+            className={activePage === "live-entry" ? "active-page" : ""}
+            onClick={() => setActivePage("live-entry")}
+          >
+            Live Entry
+          </button>
+          <button
+            className={activePage === "box-score" ? "active-page" : ""}
+            onClick={() => setActivePage("box-score")}
+          >
+            Box Score
+          </button>
         </div>
       </section>
 
-      <OnFieldPanel
-        players={state.players}
-        onFieldPlayerIds={state.currentOnFieldPlayerIds}
-        onToggleOnField={toggleOnField}
-        onRecordStat={recordStat}
-        onUndo={undoLastEvent}
-        onCommitPoint={commitPointAndAdvance}
-        pointNumber={state.game.pointNumber}
-      />
+      {activePage === "roster" ? (
+        <RosterPanel
+          players={state.players}
+          lineupGroups={state.lineupGroups}
+          lineupMembership={state.lineupMembership}
+          onAddPlayer={addPlayer}
+          onUpdatePlayer={updatePlayer}
+          onCreateLineupGroup={createLineupGroup}
+          onUpdateLineupGroup={updateLineupGroup}
+        />
+      ) : null}
 
-      <BoxScoreTable rows={rows} activeLineupName={activeLineupName} />
+      {activePage === "live-entry" ? (
+        <>
+          <section className="panel lineup-tabs">
+            <h2>Live Entry Filter</h2>
+            <div className="tab-row">
+              {state.lineupGroups.map((lineup) => (
+                <button
+                  key={lineup.id}
+                  className={selectedLiveEntryLineupIds.includes(lineup.id) ? "active-tab" : ""}
+                  onClick={() => toggleLiveEntryLineupFilter(lineup.id)}
+                >
+                  {lineup.name}
+                </button>
+              ))}
+            </div>
+            <p className="help-text">Select one or more lineup groups to filter live entry options.</p>
+          </section>
 
-      <RosterPanel players={state.players} onAddPlayer={addPlayer} />
+          <OnFieldPanel
+            players={liveEntryPlayers}
+            onFieldPlayerIds={state.currentOnFieldPlayerIds}
+            onToggleOnField={toggleOnField}
+            onRecordStat={recordStat}
+            onDecrementStat={decrementStat}
+            statTotals={liveEntryStatTotals}
+            onUndo={undoLastEvent}
+            onCommitPoint={commitPointAndAdvance}
+            pointNumber={state.game.pointNumber}
+          />
+
+          <section className="panel">
+            <p className="help-text">
+              Live entry options are filtered by lineup groups. Select multiple tabs to combine groups.
+            </p>
+          </section>
+
+        </>
+      ) : null}
+
+      {activePage === "box-score" ? (
+        <>
+          <section className="panel lineup-tabs">
+            <h2>Lineup Tabs</h2>
+            <div className="tab-row">
+              {state.lineupGroups.map((lineup) => (
+                <button
+                  key={lineup.id}
+                  className={lineup.id === activeLineupId ? "active-tab" : ""}
+                  onClick={() => setActiveLineupId(lineup.id)}
+                >
+                  {lineup.name}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <BoxScoreTable rows={rows} activeLineupName={activeLineupName} />
+        </>
+      ) : null}
     </main>
   );
 }

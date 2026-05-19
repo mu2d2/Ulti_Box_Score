@@ -11,12 +11,14 @@ The MVP must support live stat entry for a single team, starting from an empty g
 
 ## Core User Journey
 1. User signs in with team SSO.
-2. User opens or starts a game.
-3. User selects the 7 players currently on the field.
-4. User taps large stat buttons to record live events.
-5. User optionally switches between lineup tabs to view custom player groupings.
-6. User fills in opponent and game details later if needed.
-7. Data syncs to the server when connectivity is available.
+2. User goes to the Roster Entry and List page to add or edit players.
+3. User switches to the Live Entry page and opens or starts a game.
+4. User selects a lineup group filter to narrow live entry options.
+5. User selects the 7 players currently on the field.
+6. User taps large stat buttons to record live events.
+7. User switches to the Box Score page to review totals by lineup tab.
+8. User fills in opponent and game details later if needed.
+9. Data syncs to the server when connectivity is available.
 
 ## In Scope
 ### Authentication
@@ -28,11 +30,14 @@ The MVP must support live stat entry for a single team, starting from an empty g
 - Create, view, edit, and remove players
 - Store player name
 - Store jersey number
-- Store position
+- Store position (Handler, Cutter, Hybrid)
+- Store default role (Offense or Defense)
 - Store age
 - Store matching-player designation: MMP (male matching player) or WMP (woman matching player)
-- Create named lineup groups
+- Support inline editing of player fields from the roster list page
+- Create named lineup groups by selecting players and assigning custom names (for example Alpha, Beta)
 - Assign players to lineup groups
+- Edit existing lineup groups (name and player membership)
 
 ### Game Management
 - Start a game with minimal required information
@@ -49,8 +54,11 @@ The MVP must support live stat entry for a single team, starting from an empty g
   - Blocks
 - Provide large touch-friendly buttons for quick entry
 - Make it fast to record stats for any of the 7 players currently on the field
+- Allow filtering of live entry player options by single or multiple lineup group selections
 - Allow undo of the most recent stat event
 - Allow manual correction of entered stats
+- Provide immediate visual feedback when a stat increment button is pressed
+- Provide decrement controls for live stat entry to correct counts quickly
 
 ### Playing Time Tracking
 - Mark which 7 players are on the field for a point
@@ -59,7 +67,7 @@ The MVP must support live stat entry for a single team, starting from an empty g
 
 ### Box Score Views
 - Show a box score table with players as rows and stats as columns
-- Support tabs for lineup groups
+- Support tabs for lineup groups, including user-created custom groups
 - Show filtered views based on the selected lineup group
 - Keep the same underlying data across all tabs
 
@@ -114,6 +122,9 @@ The app must synchronize locally stored changes to the backend when connectivity
 ### FR-10 Box Score Views
 The app must show a box score table with lineup-group tabs.
 
+### FR-11 Roster List Editing
+The app must allow inline editing of roster list entries, including player name and position.
+
 ## Data Requirements
 ### Team
 - Team name
@@ -123,7 +134,8 @@ The app must show a box score table with lineup-group tabs.
 - Team reference
 - Player name
 - Jersey number
-- Position
+- Position (Handler, Cutter, Hybrid)
+- Role (Offense or Defense)
 - Age
 - Matching-player designation (MMP or WMP)
 
@@ -157,12 +169,17 @@ The app must show a box score table with lineup-group tabs.
 - Created timestamp
 
 ## UI Requirements
+- The app must include a dedicated Roster Entry and List page
+- The app must include a dedicated Live Entry page
+- The app must include a dedicated Box Score page
 - The main live screen must prioritize quick stat entry over general navigation
 - The main live screen must focus on the 7 current players on the field
+- The live entry page must support lineup-group filtering of selectable players
 - Stat controls must be large enough for touch use
 - Tabs must be available for lineup-group views
 - The interface must make offline state visible to the user
 - The interface must make undo visible and easy to access
+- The roster list page must allow editing of at least player name and position
 
 ## Non-Functional Requirements
 - Must work on mobile, tablet, and desktop browsers
