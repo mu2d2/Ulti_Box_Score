@@ -10,6 +10,7 @@ export function RosterPanel({
   onUpdatePlayer,
   onCreateLineupGroup,
   onUpdateLineupGroup,
+  onClearRoster,
 }) {
   const [form, setForm] = useState({
     name: "",
@@ -177,7 +178,12 @@ export function RosterPanel({
 
   return (
     <section className="panel">
-      <h2>Roster Entry</h2>
+      <div className="panel-title-row">
+        <h2>Roster Entry</h2>
+        <button type="button" className="danger-button" onClick={onClearRoster}>
+          Clear Roster
+        </button>
+      </div>
       <form className="roster-form" onSubmit={handleSubmit}>
         <input
           placeholder="Player name"

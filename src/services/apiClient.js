@@ -22,6 +22,13 @@ async function request(path, options = {}) {
 }
 
 export const apiClient = {
+  verifyGoogleIdToken(payload) {
+    return request("/auth/google/verify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   getPlayers() {
     return request("/players/");
   },

@@ -11,6 +11,7 @@ export function OnFieldPanel({
   onUndo,
   onCommitPoint,
   pointNumber,
+  pointResults = [],
 }) {
   const [pressedButtons, setPressedButtons] = useState({});
   const timeoutRef = useRef({});
@@ -47,7 +48,8 @@ export function OnFieldPanel({
         <h2>Live Entry: Point {pointNumber}</h2>
         <div className="inline-actions">
           <button onClick={onUndo}>Undo Last Event</button>
-          <button onClick={onCommitPoint}>End Point / Next</button>
+          <button onClick={() => onCommitPoint(true)}>Point Won (Goal)</button>
+          <button onClick={() => onCommitPoint(false)}>Point Lost</button>
         </div>
       </div>
 
@@ -112,6 +114,27 @@ export function OnFieldPanel({
           );
         })}
       </div>
+
+      <section className="game-log">
+        <h3>Game Log</h3>
+        {pointResults.length === 0 ? (
+          <p className="help-text">No completed points yet.</p>
+        ) : (
+          <ul className="game-log-list">
+            {[...pointResults].reverse().map((result) => (
+              <li key={result.id} className="game-log-item">
+                <span className={`point-outcome ${result.didWeScore ? "outcome-us" : "outcome-them"}`}>
+                  {result.didWeScore ? "Our Goal" : "Their Goal"}
+                </span>
+                <span>Point {result.pointNumber}</span>
+                <span className="point-score-visual">
+                  {result.usScore} - {result.themScore}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </section>
   );
 }

@@ -4,7 +4,7 @@
 This document defines the detailed requirements for the first shippable version of the Ultimate Frisbee Box Score web app. The MVP should let a coach or captain track a live game quickly, offline, and with as little friction as possible.
 
 ## MVP Goal
-The MVP must support live stat entry for a single team, starting from an empty game and allowing game details to be filled in later. The experience should work well on a phone or tablet at the field and should continue working without internet access.
+The MVP must support live stat entry for a single team across multiple games, starting from an empty game and allowing game details to be filled in later. The experience should work well on a phone or tablet at the field and should continue working without internet access.
 
 ## Primary User
 - Coach or captain responsible for tracking a game live
@@ -12,13 +12,14 @@ The MVP must support live stat entry for a single team, starting from an empty g
 ## Core User Journey
 1. User signs in with team SSO.
 2. User goes to the Roster Entry and List page to add or edit players.
-3. User switches to the Live Entry page and opens or starts a game.
-4. User selects a lineup group filter to narrow live entry options.
-5. User selects the 7 players currently on the field.
-6. User taps large stat buttons to record live events.
-7. User switches to the Box Score page to review totals by lineup tab.
-8. User fills in opponent and game details later if needed.
-9. Data syncs to the server when connectivity is available.
+3. User creates or selects a game from the Games page.
+4. User switches to the Live Entry page and tracks the selected game.
+5. User selects a lineup group filter to narrow live entry options.
+6. User selects the 7 players currently on the field.
+7. User taps large stat buttons to record live events.
+8. User switches to the Box Score page to review totals by lineup tab for the selected game.
+9. User fills in opponent and game details later if needed.
+10. Data syncs to the server when connectivity is available.
 
 ## In Scope
 ### Authentication
@@ -35,15 +36,21 @@ The MVP must support live stat entry for a single team, starting from an empty g
 - Store age
 - Store matching-player designation: MMP (male matching player) or WMP (woman matching player)
 - Support inline editing of player fields from the roster list page
+- Provide a clear-roster option with confirmation to remove all roster entries and lineup assignments
 - Create named lineup groups by selecting players and assigning custom names (for example Alpha, Beta)
 - Assign players to lineup groups
 - Edit existing lineup groups (name and player membership)
 
 ### Game Management
+- Create multiple games and select an active game
+- Edit game name and opponent from the Games page
+- Delete a game with confirmation and safe active-game fallback behavior
+- Mark a game as completed and optionally reopen it later
 - Start a game with minimal required information
 - Allow opponent, date, location, and tournament to be entered later
 - Support game types for practice, scrimmage, game, and tournament
 - Save game records locally while offline
+- Reuse the same roster and lineup groups across different games
 
 ### Live Stat Entry
 - Track stat events individually, one event per row in the database
@@ -59,6 +66,8 @@ The MVP must support live stat entry for a single team, starting from an empty g
 - Allow manual correction of entered stats
 - Provide immediate visual feedback when a stat increment button is pressed
 - Provide decrement controls for live stat entry to correct counts quickly
+- Restrict decrement actions to events in the current point
+- Provide a clear-history option with confirmation to reset current game history without deleting roster or lineup groups
 
 ### Playing Time Tracking
 - Mark which 7 players are on the field for a point
@@ -68,7 +77,7 @@ The MVP must support live stat entry for a single team, starting from an empty g
 ### Box Score Views
 - Show a box score table with players as rows and stats as columns
 - Support tabs for lineup groups, including user-created custom groups
-- Show filtered views based on the selected lineup group
+- Show filtered views based on one or more selected lineup groups
 - Keep the same underlying data across all tabs
 
 ### Offline-First Behavior
@@ -169,6 +178,7 @@ The app must allow inline editing of roster list entries, including player name 
 - Created timestamp
 
 ## UI Requirements
+- The app must include a dedicated Games page
 - The app must include a dedicated Roster Entry and List page
 - The app must include a dedicated Live Entry page
 - The app must include a dedicated Box Score page

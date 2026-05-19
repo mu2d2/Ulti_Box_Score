@@ -32,6 +32,8 @@ ENV/
 .env
 .env.*
 !.env.example
+backend/.env
+backend/.env.*
 
 # Databases and local runtime files
 *.sqlite3

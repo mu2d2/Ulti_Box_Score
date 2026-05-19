@@ -1,13 +1,23 @@
 export const initialState = {
-  game: {
-    id: "game-local",
-    opponent: "",
-    pointNumber: 1,
+  games: [
+    {
+      id: "game-1",
+      name: "Game 1",
+      opponent: "",
+      isCompleted: false,
+      createdAt: "",
+    },
+  ],
+  activeGameId: "game-1",
+  gameDataById: {
+    "game-1": {
+      pointNumber: 1,
+      currentOnFieldPlayerIds: [],
+      playerPointsPlayed: {},
+      statEvents: [],
+    },
   },
   players: [],
   lineupGroups: [],
   lineupMembership: {},
-  currentOnFieldPlayerIds: [],
-  playerPointsPlayed: {},
-  statEvents: [],
 };

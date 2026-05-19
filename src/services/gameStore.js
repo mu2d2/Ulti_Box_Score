@@ -1,8 +1,17 @@
-const STORAGE_KEY = "ulti-box-score-state";
+const STORAGE_KEY_PREFIX = "ulti-box-score-state";
 
-export function loadGameState() {
+function toScopeSuffix(teamEmail) {
+  const normalized = (teamEmail || "").trim().toLowerCase();
+  return normalized || "anonymous";
+}
+
+function toStorageKey(teamEmail) {
+  return `${STORAGE_KEY_PREFIX}:${toScopeSuffix(teamEmail)}`;
+}
+
+export function loadGameState(scopeKey) {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(toStorageKey(scopeKey));
     if (!raw) {
       return null;
     }
@@ -12,9 +21,9 @@ export function loadGameState() {
   }
 }
 
-export function saveGameState(state) {
+export function saveGameState(scopeKey, state) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(toStorageKey(scopeKey), JSON.stringify(state));
   } catch (error) {
     // Ignore storage errors in starter scaffold.
   }

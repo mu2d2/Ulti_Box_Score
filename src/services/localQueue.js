@@ -1,20 +1,29 @@
-const QUEUE_KEY = "ulti-box-score-sync-queue";
+const QUEUE_KEY_PREFIX = "ulti-box-score-sync-queue";
 
-export function readQueue() {
+function toScopeSuffix(teamEmail) {
+  const normalized = (teamEmail || "").trim().toLowerCase();
+  return normalized || "anonymous";
+}
+
+function toQueueKey(teamEmail) {
+  return `${QUEUE_KEY_PREFIX}:${toScopeSuffix(teamEmail)}`;
+}
+
+export function readQueue(scopeKey) {
   try {
-    const raw = window.localStorage.getItem(QUEUE_KEY);
+    const raw = window.localStorage.getItem(toQueueKey(scopeKey));
     return raw ? JSON.parse(raw) : [];
   } catch (error) {
     return [];
   }
 }
 
-export function enqueueAction(action) {
-  const queue = readQueue();
+export function enqueueAction(scopeKey, action) {
+  const queue = readQueue(scopeKey);
   queue.push({ ...action, queuedAt: new Date().toISOString() });
-  window.localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  window.localStorage.setItem(toQueueKey(scopeKey), JSON.stringify(queue));
 }
 
-export function clearQueue() {
-  window.localStorage.setItem(QUEUE_KEY, JSON.stringify([]));
+export function clearQueue(scopeKey) {
+  window.localStorage.setItem(toQueueKey(scopeKey), JSON.stringify([]));
 }

@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { RosterPanel } from "../components/RosterPanel";
+import { GamesPanel } from "../components/GamesPanel";
 import { OnFieldPanel } from "../components/OnFieldPanel";
 import { BoxScoreTable } from "../components/BoxScoreTable";
 import { initialState } from "../models/initialState";
 import { DEFAULT_LINEUP_GROUPS } from "../models/types";
 import { createId } from "../utils/id";
 import { buildBoxScore } from "../utils/stats";
-import { enqueueAction, readQueue } from "../services/localQueue";
+import { clearQueue, enqueueAction, readQueue } from "../services/localQueue";
 import { loadGameState, saveGameState } from "../services/gameStore";
+import {
+  clearAuthSession,
+  isAuthSessionValid,
+  loadAuthSession,
+  saveAuthSession,
+} from "../services/authStore";
+import { SignInPage } from "../features/auth/SignInPage";
+import { hashSha256Hex } from "../services/googleAuth";
+import { apiClient } from "../services/apiClient";
 
 function getPlayerIdsForLineup(lineupId, players, lineupMembership) {
   if (lineupId === "lineup-all") {
@@ -35,52 +45,209 @@ function getPlayerIdsForLineups(lineupIds, players, lineupMembership) {
   return [...merged];
 }
 
-export default function App() {
-  const [state, setState] = useState(() => {
-    const local = loadGameState();
-    if (!local) {
-      return {
-        ...initialState,
-        lineupGroups: DEFAULT_LINEUP_GROUPS,
+function createEmptyGameData() {
+  return {
+    pointNumber: 1,
+    currentOnFieldPlayerIds: [],
+    playerPointsPlayed: {},
+    statEvents: [],
+    pointResults: [],
+  };
+}
+
+function buildScoreFromPointResults(pointResults) {
+  return pointResults.reduce(
+    (score, result) => {
+      if (result.didWeScore) {
+        return { us: score.us + 1, them: score.them };
+      }
+      return { us: score.us, them: score.them + 1 };
+    },
+    { us: 0, them: 0 }
+  );
+}
+
+function buildInitialState(local) {
+  if (!local) {
+    return {
+      ...initialState,
+      lineupGroups: DEFAULT_LINEUP_GROUPS,
+      games: [
+        {
+          id: "game-1",
+          name: "Game 1",
+          opponent: "",
+          isCompleted: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      activeGameId: "game-1",
+      gameDataById: {
+        "game-1": createEmptyGameData(),
+      },
+    };
+  }
+
+  const players = Array.isArray(local.players) ? local.players : [];
+  const lineupGroups =
+    Array.isArray(local.lineupGroups) && local.lineupGroups.length > 0
+      ? local.lineupGroups
+      : DEFAULT_LINEUP_GROUPS;
+  const lineupMembership =
+    local.lineupMembership && typeof local.lineupMembership === "object"
+      ? local.lineupMembership
+      : {};
+
+  const hasMultiGame = Array.isArray(local.games) && local.gameDataById;
+  if (hasMultiGame) {
+    const games = (local.games.length > 0 ? local.games : initialState.games).map((game) => ({
+      ...game,
+      isCompleted: Boolean(game.isCompleted),
+    }));
+    const activeGameId = games.some((g) => g.id === local.activeGameId)
+      ? local.activeGameId
+      : games[0].id;
+    const gameDataById = {};
+    for (const game of games) {
+      const raw = local.gameDataById?.[game.id] || {};
+      gameDataById[game.id] = {
+        pointNumber: Number(raw.pointNumber) > 0 ? Number(raw.pointNumber) : 1,
+        currentOnFieldPlayerIds: Array.isArray(raw.currentOnFieldPlayerIds)
+          ? raw.currentOnFieldPlayerIds
+          : [],
+        playerPointsPlayed:
+          raw.playerPointsPlayed && typeof raw.playerPointsPlayed === "object"
+            ? raw.playerPointsPlayed
+            : {},
+        statEvents: Array.isArray(raw.statEvents) ? raw.statEvents : [],
+        pointResults: Array.isArray(raw.pointResults) ? raw.pointResults : [],
       };
     }
 
     return {
       ...initialState,
       ...local,
-      players: Array.isArray(local.players) ? local.players : [],
-      lineupGroups:
-        Array.isArray(local.lineupGroups) && local.lineupGroups.length > 0
-          ? local.lineupGroups
-          : DEFAULT_LINEUP_GROUPS,
-      lineupMembership:
-        local.lineupMembership && typeof local.lineupMembership === "object"
-          ? local.lineupMembership
-          : {},
-      currentOnFieldPlayerIds: Array.isArray(local.currentOnFieldPlayerIds)
-        ? local.currentOnFieldPlayerIds
-        : [],
-      playerPointsPlayed:
-        local.playerPointsPlayed && typeof local.playerPointsPlayed === "object"
-          ? local.playerPointsPlayed
-          : {},
-      statEvents: Array.isArray(local.statEvents) ? local.statEvents : [],
+      players,
+      lineupGroups,
+      lineupMembership,
+      games,
+      activeGameId,
+      gameDataById,
     };
-  });
+  }
 
-  const [activeLineupId, setActiveLineupId] = useState("lineup-all");
+  const legacyGameId = local.game?.id || "game-1";
+  return {
+    ...initialState,
+    ...local,
+    players,
+    lineupGroups,
+    lineupMembership,
+    games: [
+      {
+        id: legacyGameId,
+        name: local.game?.name || "Game 1",
+        opponent: local.game?.opponent || "",
+        isCompleted: false,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    activeGameId: legacyGameId,
+    gameDataById: {
+      [legacyGameId]: {
+        pointNumber: Number(local.game?.pointNumber) > 0 ? Number(local.game?.pointNumber) : 1,
+        currentOnFieldPlayerIds: Array.isArray(local.currentOnFieldPlayerIds)
+          ? local.currentOnFieldPlayerIds
+          : [],
+        playerPointsPlayed:
+          local.playerPointsPlayed && typeof local.playerPointsPlayed === "object"
+            ? local.playerPointsPlayed
+            : {},
+        statEvents: Array.isArray(local.statEvents) ? local.statEvents : [],
+        pointResults: [],
+      },
+    },
+  };
+}
+
+export default function App() {
+  const [authSession, setAuthSession] = useState(() => {
+    const session = loadAuthSession();
+    return isAuthSessionValid(session) ? session : null;
+  });
+  const [state, setState] = useState(() => buildInitialState(loadGameState(authSession?.teamScopeKey)));
+
+  const [selectedBoxScoreLineupIds, setSelectedBoxScoreLineupIds] = useState(["lineup-all"]);
   const [selectedLiveEntryLineupIds, setSelectedLiveEntryLineupIds] = useState(["lineup-all"]);
-  const [activePage, setActivePage] = useState("box-score");
-  const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue().length);
+  const [activePage, setActivePage] = useState("games");
+  const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue(authSession?.teamScopeKey).length);
+
+  const activeGame =
+    state.games.find((game) => game.id === state.activeGameId) || state.games[0] || null;
+  const activeGameId = activeGame?.id || null;
+  const activeGameData = activeGameId
+    ? state.gameDataById[activeGameId] || createEmptyGameData()
+    : createEmptyGameData();
 
   useEffect(() => {
-    saveGameState(state);
-  }, [state]);
+    if (!authSession?.teamScopeKey) {
+      return;
+    }
+
+    saveGameState(authSession.teamScopeKey, state);
+  }, [authSession?.teamScopeKey, state]);
+
+  useEffect(() => {
+    if (!authSession?.teamScopeKey) {
+      setState(buildInitialState(null));
+      setSyncQueueSize(0);
+      return;
+    }
+
+    setState(buildInitialState(loadGameState(authSession.teamScopeKey)));
+    setSyncQueueSize(readQueue(authSession.teamScopeKey).length);
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+    setActivePage("games");
+  }, [authSession?.teamScopeKey]);
+
+  async function handleGoogleCredential(credential) {
+    const nonce = window.sessionStorage.getItem("ulti-box-score-auth-nonce");
+    const verification = await apiClient.verifyGoogleIdToken({ credential, nonce });
+    const normalizedEmail = String(verification.teamEmail || "").trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new Error("Verification response is missing a team email.");
+    }
+
+    const teamScopeKey = await hashSha256Hex(normalizedEmail);
+    const nextSession = {
+      teamName: String(verification.teamName || "").trim(),
+      teamEmail: normalizedEmail,
+      teamScopeKey,
+      authToken: String(verification.authToken || ""),
+      expiresAt: String(verification.expiresAt || ""),
+      signedInAt: new Date().toISOString(),
+    };
+
+    window.sessionStorage.removeItem("ulti-box-score-auth-nonce");
+    saveAuthSession(nextSession);
+    setAuthSession(nextSession);
+  }
+
+  function handleSignOut() {
+    if (window.google?.accounts?.id && authSession?.teamEmail) {
+      window.google.accounts.id.revoke(authSession.teamEmail, () => {});
+      window.google.accounts.id.disableAutoSelect();
+    }
+
+    clearAuthSession();
+    setAuthSession(null);
+  }
 
   function updateStateWithQueue(nextState, action) {
     setState(nextState);
-    enqueueAction(action);
-    setSyncQueueSize(readQueue().length);
+    enqueueAction(authSession?.teamScopeKey, action);
+    setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
   }
 
   function addPlayer(player) {
@@ -148,6 +315,120 @@ export default function App() {
     });
   }
 
+  function createGame(name, opponent) {
+    const gameId = createId("game");
+    const nextName = name.trim() || `Game ${state.games.length + 1}`;
+    const newGame = {
+      id: gameId,
+      name: nextName,
+      opponent: opponent.trim(),
+      isCompleted: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const next = {
+      ...state,
+      games: [...state.games, newGame],
+      activeGameId: gameId,
+      gameDataById: {
+        ...state.gameDataById,
+        [gameId]: createEmptyGameData(),
+      },
+    };
+
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+    updateStateWithQueue(next, { type: "GAME_CREATED", payload: newGame });
+  }
+
+  function updateGame(gameId, updates) {
+    const nextName = (updates.name || "").trim();
+    const next = {
+      ...state,
+      games: state.games.map((game) =>
+        game.id === gameId
+          ? {
+              ...game,
+              name: nextName || game.name,
+              opponent: (updates.opponent || "").trim(),
+            }
+          : game
+      ),
+    };
+
+    updateStateWithQueue(next, {
+      type: "GAME_UPDATED",
+      payload: { gameId, updates },
+    });
+  }
+
+  function toggleGameComplete(gameId) {
+    const next = {
+      ...state,
+      games: state.games.map((game) =>
+        game.id === gameId ? { ...game, isCompleted: !game.isCompleted } : game
+      ),
+    };
+
+    updateStateWithQueue(next, {
+      type: "GAME_COMPLETION_TOGGLED",
+      payload: { gameId },
+    });
+  }
+
+  function deleteGame(gameId) {
+    if (state.games.length === 1) {
+      const replacement = {
+        id: "game-1",
+        name: "Game 1",
+        opponent: "",
+        isCompleted: false,
+        createdAt: new Date().toISOString(),
+      };
+      const next = {
+        ...state,
+        games: [replacement],
+        activeGameId: replacement.id,
+        gameDataById: {
+          [replacement.id]: createEmptyGameData(),
+        },
+      };
+      updateStateWithQueue(next, {
+        type: "GAME_DELETED_AND_RESET",
+        payload: { deletedGameId: gameId },
+      });
+      return;
+    }
+
+    const remainingGames = state.games.filter((game) => game.id !== gameId);
+    const nextActiveGameId =
+      state.activeGameId === gameId ? remainingGames[0].id : state.activeGameId;
+    const nextGameDataById = { ...state.gameDataById };
+    delete nextGameDataById[gameId];
+
+    const next = {
+      ...state,
+      games: remainingGames,
+      activeGameId: nextActiveGameId,
+      gameDataById: nextGameDataById,
+    };
+
+    updateStateWithQueue(next, {
+      type: "GAME_DELETED",
+      payload: { gameId },
+    });
+  }
+
+  function selectGame(gameId) {
+    if (!state.games.some((game) => game.id === gameId)) {
+      return;
+    }
+
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+    setState((prev) => ({ ...prev, activeGameId: gameId }));
+  }
+
   function updateLineupGroup(lineupId, name, playerIds) {
     if (lineupId === "lineup-all") {
       return;
@@ -210,41 +491,78 @@ export default function App() {
         state.lineupMembership
       );
 
-      setState((prev) => ({
-        ...prev,
-        currentOnFieldPlayerIds: filteredPlayerIds.slice(0, 7),
-      }));
+      if (activeGameId) {
+        setState((prev) => {
+          const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+          return {
+            ...prev,
+            gameDataById: {
+              ...prev.gameDataById,
+              [activeGameId]: {
+                ...currentData,
+                currentOnFieldPlayerIds: filteredPlayerIds.slice(0, 7),
+              },
+            },
+          };
+        });
+      }
 
       return nextSelection;
     });
   }
 
+  function toggleBoxScoreLineupFilter(lineupId) {
+    setSelectedBoxScoreLineupIds((current) => {
+      if (lineupId === "lineup-all") {
+        return ["lineup-all"];
+      }
+
+      const withoutAll = current.filter((id) => id !== "lineup-all");
+      const isSelected = withoutAll.includes(lineupId);
+      const next = isSelected ? withoutAll.filter((id) => id !== lineupId) : [...withoutAll, lineupId];
+
+      return next.length === 0 ? ["lineup-all"] : next;
+    });
+  }
+
   function toggleOnField(playerId) {
-    const alreadyOnField = state.currentOnFieldPlayerIds.includes(playerId);
+    if (!activeGameId) {
+      return;
+    }
+
+    const currentOnField = activeGameData.currentOnFieldPlayerIds;
+    const alreadyOnField = currentOnField.includes(playerId);
     let nextIds = alreadyOnField
-      ? state.currentOnFieldPlayerIds.filter((id) => id !== playerId)
-      : [...state.currentOnFieldPlayerIds, playerId];
+      ? currentOnField.filter((id) => id !== playerId)
+      : [...currentOnField, playerId];
 
     if (nextIds.length > 7) {
       nextIds = nextIds.slice(nextIds.length - 7);
     }
 
-    const next = {
-      ...state,
-      currentOnFieldPlayerIds: nextIds,
-    };
-
-    setState(next);
+    setState((prev) => {
+      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+      return {
+        ...prev,
+        gameDataById: {
+          ...prev.gameDataById,
+          [activeGameId]: {
+            ...currentData,
+            currentOnFieldPlayerIds: nextIds,
+          },
+        },
+      };
+    });
   }
 
   function recordStat(playerId, statType) {
-    if (!state.currentOnFieldPlayerIds.includes(playerId)) {
+    if (!activeGameId || !activeGameData.currentOnFieldPlayerIds.includes(playerId)) {
       return;
     }
 
     const event = {
       id: createId("evt"),
-      pointNumber: state.game.pointNumber,
+      pointNumber: activeGameData.pointNumber,
       playerId,
       statType,
       createdAt: new Date().toISOString(),
@@ -252,21 +570,31 @@ export default function App() {
 
     const next = {
       ...state,
-      statEvents: [...state.statEvents, event],
+      gameDataById: {
+        ...state.gameDataById,
+        [activeGameId]: {
+          ...activeGameData,
+          statEvents: [...activeGameData.statEvents, event],
+        },
+      },
     };
 
     updateStateWithQueue(next, { type: "STAT_EVENT_CREATED", payload: event });
   }
 
   function decrementStat(playerId, statType) {
-    if (!state.currentOnFieldPlayerIds.includes(playerId)) {
+    if (!activeGameId || !activeGameData.currentOnFieldPlayerIds.includes(playerId)) {
       return;
     }
 
     let targetIndex = -1;
-    for (let i = state.statEvents.length - 1; i >= 0; i -= 1) {
-      const event = state.statEvents[i];
-      if (event.playerId === playerId && event.statType === statType) {
+    for (let i = activeGameData.statEvents.length - 1; i >= 0; i -= 1) {
+      const event = activeGameData.statEvents[i];
+      if (
+        event.playerId === playerId &&
+        event.statType === statType &&
+        event.pointNumber === activeGameData.pointNumber
+      ) {
         targetIndex = i;
         break;
       }
@@ -276,10 +604,16 @@ export default function App() {
       return;
     }
 
-    const removedEvent = state.statEvents[targetIndex];
+    const removedEvent = activeGameData.statEvents[targetIndex];
     const next = {
       ...state,
-      statEvents: state.statEvents.filter((_, idx) => idx !== targetIndex),
+      gameDataById: {
+        ...state.gameDataById,
+        [activeGameId]: {
+          ...activeGameData,
+          statEvents: activeGameData.statEvents.filter((_, idx) => idx !== targetIndex),
+        },
+      },
     };
 
     updateStateWithQueue(next, {
@@ -289,14 +623,24 @@ export default function App() {
   }
 
   function undoLastEvent() {
-    const last = state.statEvents[state.statEvents.length - 1];
+    if (!activeGameId) {
+      return;
+    }
+
+    const last = activeGameData.statEvents[activeGameData.statEvents.length - 1];
     if (!last) {
       return;
     }
 
     const next = {
       ...state,
-      statEvents: state.statEvents.slice(0, -1),
+      gameDataById: {
+        ...state.gameDataById,
+        [activeGameId]: {
+          ...activeGameData,
+          statEvents: activeGameData.statEvents.slice(0, -1),
+        },
+      },
     };
 
     updateStateWithQueue(next, {
@@ -305,38 +649,139 @@ export default function App() {
     });
   }
 
-  function commitPointAndAdvance() {
-    if (state.currentOnFieldPlayerIds.length === 0) {
+  function commitPointAndAdvance(didWeScore) {
+    if (!activeGameId || activeGameData.currentOnFieldPlayerIds.length === 0) {
       return;
     }
 
-    const nextCounts = { ...state.playerPointsPlayed };
-    for (const playerId of state.currentOnFieldPlayerIds) {
+    const nextCounts = { ...activeGameData.playerPointsPlayed };
+    for (const playerId of activeGameData.currentOnFieldPlayerIds) {
       nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
     }
 
     const next = {
       ...state,
-      playerPointsPlayed: nextCounts,
-      game: {
-        ...state.game,
-        pointNumber: state.game.pointNumber + 1,
+      gameDataById: {
+        ...state.gameDataById,
+        [activeGameId]: {
+          ...activeGameData,
+          playerPointsPlayed: nextCounts,
+          pointResults: [
+            ...activeGameData.pointResults,
+            {
+              id: createId("pt"),
+              pointNumber: activeGameData.pointNumber,
+              didWeScore,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          pointNumber: activeGameData.pointNumber + 1,
+          currentOnFieldPlayerIds: [],
+        },
       },
-      currentOnFieldPlayerIds: [],
     };
 
     updateStateWithQueue(next, {
       type: "POINT_COMMITTED",
-      payload: { pointNumber: state.game.pointNumber },
+      payload: { gameId: activeGameId, pointNumber: activeGameData.pointNumber, didWeScore },
     });
   }
 
-  const activeLineupName =
-    state.lineupGroups.find((lineup) => lineup.id === activeLineupId)?.name || "All";
+  function clearHistory() {
+    const confirmed = window.confirm(
+      "Clear all game history (stats, points played, and current point selections)?"
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const next = {
+      ...state,
+      gameDataById: {
+        ...state.gameDataById,
+        [activeGameId]: createEmptyGameData(),
+      },
+    };
+
+    clearQueue(authSession?.teamScopeKey);
+    setSyncQueueSize(0);
+    setState(next);
+  }
+
+  function clearRoster() {
+    const confirmed = window.confirm(
+      "Clear roster and lineup setup? This will also clear game history tied to players."
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const next = {
+      ...state,
+      players: [],
+      lineupGroups: DEFAULT_LINEUP_GROUPS,
+      lineupMembership: {},
+      gameDataById: Object.fromEntries(
+        state.games.map((game) => [game.id, createEmptyGameData()])
+      ),
+    };
+
+    clearQueue(authSession?.teamScopeKey);
+    setSyncQueueSize(0);
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+    setState(next);
+  }
+
+  if (!authSession?.teamScopeKey) {
+    return <SignInPage onGoogleCredential={handleGoogleCredential} />;
+  }
+
+  const activeLineupName = selectedBoxScoreLineupIds
+    .map((id) => state.lineupGroups.find((lineup) => lineup.id === id)?.name)
+    .filter(Boolean)
+    .join(" + ");
+
+  const activeGameLabel = activeGame
+    ? `${activeGame.name}${activeGame.opponent ? ` vs ${activeGame.opponent}` : ""}${
+        activeGame.isCompleted ? " [Completed]" : ""
+      }`
+    : "No game selected";
+
+  const activeGameScore = useMemo(
+    () => buildScoreFromPointResults(activeGameData.pointResults || []),
+    [activeGameData.pointResults]
+  );
+
+  const pointResultLog = useMemo(() => {
+    const score = { us: 0, them: 0 };
+    return (activeGameData.pointResults || []).map((result) => {
+      if (result.didWeScore) {
+        score.us += 1;
+      } else {
+        score.them += 1;
+      }
+
+      return {
+        ...result,
+        usScore: score.us,
+        themScore: score.them,
+      };
+    });
+  }, [activeGameData.pointResults]);
+
+  const gameScoresById = useMemo(() => {
+    const scores = {};
+    for (const game of state.games) {
+      const pointResults = state.gameDataById[game.id]?.pointResults || [];
+      scores[game.id] = buildScoreFromPointResults(pointResults);
+    }
+    return scores;
+  }, [state.games, state.gameDataById]);
 
   const visiblePlayerIds = useMemo(
-    () => getPlayerIdsForLineup(activeLineupId, state.players, state.lineupMembership),
-    [activeLineupId, state.players, state.lineupMembership]
+    () => getPlayerIdsForLineups(selectedBoxScoreLineupIds, state.players, state.lineupMembership),
+    [selectedBoxScoreLineupIds, state.players, state.lineupMembership]
   );
 
   const liveEntryVisiblePlayerIds = useMemo(
@@ -350,40 +795,80 @@ export default function App() {
   );
 
   useEffect(() => {
-    const allowed = new Set(liveEntryVisiblePlayerIds);
-    const nextOnField = state.currentOnFieldPlayerIds.filter((id) => allowed.has(id));
-    if (nextOnField.length !== state.currentOnFieldPlayerIds.length) {
-      setState((prev) => ({ ...prev, currentOnFieldPlayerIds: nextOnField }));
+    if (!activeGameId) {
+      return;
     }
-  }, [liveEntryVisiblePlayerIds, state.currentOnFieldPlayerIds]);
+
+    const allowed = new Set(liveEntryVisiblePlayerIds);
+    const currentOnField = activeGameData.currentOnFieldPlayerIds;
+    const nextOnField = currentOnField.filter((id) => allowed.has(id));
+    if (nextOnField.length !== currentOnField.length) {
+      setState((prev) => {
+        const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+        return {
+          ...prev,
+          gameDataById: {
+            ...prev.gameDataById,
+            [activeGameId]: {
+              ...currentData,
+              currentOnFieldPlayerIds: nextOnField,
+            },
+          },
+        };
+      });
+    }
+  }, [activeGameId, activeGameData.currentOnFieldPlayerIds, liveEntryVisiblePlayerIds]);
 
   const rows = useMemo(
-    () => buildBoxScore(state.players, state.statEvents, state.playerPointsPlayed, visiblePlayerIds),
-    [state.players, state.statEvents, state.playerPointsPlayed, visiblePlayerIds]
+    () =>
+      buildBoxScore(
+        state.players,
+        activeGameData.statEvents,
+        activeGameData.playerPointsPlayed,
+        visiblePlayerIds
+      ),
+    [state.players, activeGameData.statEvents, activeGameData.playerPointsPlayed, visiblePlayerIds]
   );
 
   const liveEntryStatTotals = useMemo(() => {
     const totals = {};
-    for (const event of state.statEvents) {
+    for (const event of activeGameData.statEvents) {
       const key = `${event.playerId}:${event.statType}`;
       totals[key] = (totals[key] || 0) + 1;
     }
     return totals;
-  }, [state.statEvents]);
+  }, [activeGameData.statEvents]);
 
   return (
     <main className="layout">
       <header className="app-header">
         <div>
           <h1>Ultimate Frisbee Box Score Prototype</h1>
-          <p>Hello World test: app shell loaded.</p>
+          <p>Team: {authSession.teamName || authSession.teamEmail}</p>
+          <p>
+            Active Game: {activeGameLabel} | Score {activeGameScore.us}-{activeGameScore.them}
+          </p>
         </div>
-        <div className="sync-pill">Pending Sync: {syncQueueSize}</div>
+        <div className="header-actions">
+          <div className="sync-pill">Pending Sync: {syncQueueSize}</div>
+          <button type="button" className="secondary-button" onClick={handleSignOut}>
+            Sign Out
+          </button>
+          <button type="button" className="danger-button" onClick={clearHistory}>
+            Clear History
+          </button>
+        </div>
       </header>
 
       <section className="panel lineup-tabs">
         <h2>Pages</h2>
         <div className="page-nav">
+          <button
+            className={activePage === "games" ? "active-page" : ""}
+            onClick={() => setActivePage("games")}
+          >
+            Games
+          </button>
           <button
             className={activePage === "roster" ? "active-page" : ""}
             onClick={() => setActivePage("roster")}
@@ -405,6 +890,19 @@ export default function App() {
         </div>
       </section>
 
+      {activePage === "games" ? (
+        <GamesPanel
+          games={state.games}
+          activeGameId={state.activeGameId}
+          gameScoresById={gameScoresById}
+          onCreateGame={createGame}
+          onSelectGame={selectGame}
+          onUpdateGame={updateGame}
+          onDeleteGame={deleteGame}
+          onToggleGameComplete={toggleGameComplete}
+        />
+      ) : null}
+
       {activePage === "roster" ? (
         <RosterPanel
           players={state.players}
@@ -414,6 +912,7 @@ export default function App() {
           onUpdatePlayer={updatePlayer}
           onCreateLineupGroup={createLineupGroup}
           onUpdateLineupGroup={updateLineupGroup}
+          onClearRoster={clearRoster}
         />
       ) : null}
 
@@ -437,14 +936,15 @@ export default function App() {
 
           <OnFieldPanel
             players={liveEntryPlayers}
-            onFieldPlayerIds={state.currentOnFieldPlayerIds}
+            onFieldPlayerIds={activeGameData.currentOnFieldPlayerIds}
             onToggleOnField={toggleOnField}
             onRecordStat={recordStat}
             onDecrementStat={decrementStat}
             statTotals={liveEntryStatTotals}
             onUndo={undoLastEvent}
             onCommitPoint={commitPointAndAdvance}
-            pointNumber={state.game.pointNumber}
+            pointNumber={activeGameData.pointNumber}
+            pointResults={pointResultLog}
           />
 
           <section className="panel">
@@ -464,13 +964,14 @@ export default function App() {
               {state.lineupGroups.map((lineup) => (
                 <button
                   key={lineup.id}
-                  className={lineup.id === activeLineupId ? "active-tab" : ""}
-                  onClick={() => setActiveLineupId(lineup.id)}
+                  className={selectedBoxScoreLineupIds.includes(lineup.id) ? "active-tab" : ""}
+                  onClick={() => toggleBoxScoreLineupFilter(lineup.id)}
                 >
                   {lineup.name}
                 </button>
               ))}
             </div>
+            <p className="help-text">Select one or more lineup groups to combine box score views.</p>
           </section>
 
           <BoxScoreTable rows={rows} activeLineupName={activeLineupName} />

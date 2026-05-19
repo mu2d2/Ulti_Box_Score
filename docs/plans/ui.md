@@ -5,10 +5,15 @@ The app should be optimized for live, in-game stat entry on a phone or tablet. T
 
 The main live screen should focus on the **7 players currently on the field** and make it easy to update **any stat for any of those players** with a single tap.
 
-The app should have three primary pages:
+The app should have separate areas for **Roster** and **Games** so roster setup is reusable across multiple games.
+
+The app should have four primary pages:
+- **Games** page
 - **Roster Entry and List** page
 - **Live Entry** page
 - **Box Score** page
+
+The roster page defines players and lineup groups once, and those should be reused when creating and tracking different games.
 
 ### Live Entry
 The live entry screen should be separate from the box score screen.
@@ -23,8 +28,13 @@ For live play, the live entry page should show the players from the selected lin
 
 The interface should support quick undo for the most recent stat event so mistakes can be corrected during live entry.
 
- - Edit existing lineup groups (rename and update selected players)
 Each stat button press should provide immediate visual feedback so the user can confirm the tap was registered.
+
+Live entry should include both increment and decrement controls for each stat so users can quickly correct mistakes while tracking points.
+
+Decrement should only affect events from the current point to avoid changing historical points by mistake.
+
+The app should provide a clear, visible **Clear History** action with confirmation to reset current game history (stat events, points played, and current on-field selections) while keeping roster and lineup group setup.
 
 ### Box Score
 The expected counting stats to start will be: Goals, Assists, Turnovers, Blocks, Points Played.
@@ -36,6 +46,8 @@ Similar to this pop up but easy for an user to access from the box score table p
 ![alt text](GUI_buttons.png)
 
 There should be different tabbed views on the box score to view different lineups that the user sets from Roster Entry. These tabs should act as quick filters for customized views of the same live stat table.
+
+Box score tabs should support selecting one or more lineup groups at the same time so users can view combined stats across multiple lines.
 
 Points Played should update automatically based on which players are marked as being on the field for a point.
 
@@ -50,12 +62,19 @@ The roster entry form should also include a simple way to mark each player as MM
 
 The roster list on this page should support inline editing so the user can quickly update player information (name, position, role, jersey number, age, and MMP/WMP) without leaving the list.
 
+The roster page should provide a clear **Clear Roster** action with confirmation to remove all players and lineup assignments.
+
 The roster page should also include a lineup builder section:
 - Enter lineup group name
 - Select players to include
 - Save the group so it appears as a new tab on the Box Score page
+- Edit existing lineup groups (rename and update selected players)
 
 ### Game Setup and Entry
+The user should be able to create multiple games from a dedicated Games page, select an active game, and then use Live Entry and Box Score for that selected game.
+
+The Games page should support editing game details, deleting a game with confirmation, and toggling game status between In Progress and Completed.
+
 The user should be able to start a game quickly with only a minimal amount of required information. Opponent, date, location, and tournament details can be filled in later.
 
 The live scoring flow should allow stat entry first and game metadata later, so the app can be used immediately when a game begins.
