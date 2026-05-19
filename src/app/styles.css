@@ -55,6 +55,31 @@ body {
   font-weight: 700;
 }
 
+.inline-edit-trigger {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.team-name-edit-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.team-name-edit-form input {
+  padding: 4px 8px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
 .danger-button {
   border: 0;
   border-radius: 8px;

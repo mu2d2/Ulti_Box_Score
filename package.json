@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:api": "node backend/server.js",
+    "dev:api": "node --env-file=.env.local backend/server.js",
     "build": "vite build",
     "preview": "vite preview"
   },

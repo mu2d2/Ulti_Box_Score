@@ -181,6 +181,8 @@ export default function App() {
   const [selectedLiveEntryLineupIds, setSelectedLiveEntryLineupIds] = useState(["lineup-all"]);
   const [activePage, setActivePage] = useState("games");
   const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue(authSession?.teamScopeKey).length);
+  const [isEditingTeamName, setIsEditingTeamName] = useState(false);
+  const [draftTeamName, setDraftTeamName] = useState("");
 
   const activeGame =
     state.games.find((game) => game.id === state.activeGameId) || state.games[0] || null;
@@ -208,7 +210,7 @@ export default function App() {
     setSyncQueueSize(readQueue(authSession.teamScopeKey).length);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
-    setActivePage("games");
+    setActivePage("box-score");
   }, [authSession?.teamScopeKey]);
 
   async function handleGoogleCredential(credential) {
@@ -242,6 +244,30 @@ export default function App() {
 
     clearAuthSession();
     setAuthSession(null);
+  }
+
+  function startEditingTeamName() {
+    setDraftTeamName(authSession?.teamName || "");
+    setIsEditingTeamName(true);
+  }
+
+  function cancelEditingTeamName() {
+    setIsEditingTeamName(false);
+    setDraftTeamName("");
+  }
+
+  function saveTeamName(event) {
+    event.preventDefault();
+    const trimmed = draftTeamName.trim();
+    if (!trimmed || !authSession) {
+      cancelEditingTeamName();
+      return;
+    }
+    const updated = { ...authSession, teamName: trimmed };
+    saveAuthSession(updated);
+    setAuthSession(updated);
+    setIsEditingTeamName(false);
+    setDraftTeamName("");
   }
 
   function updateStateWithQueue(nextState, action) {
@@ -844,7 +870,23 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1>Ultimate Frisbee Box Score Prototype</h1>
-          <p>Team: {authSession.teamName || authSession.teamEmail}</p>
+          {isEditingTeamName ? (
+            <form className="team-name-edit-form" onSubmit={saveTeamName}>
+              <input
+                autoFocus
+                value={draftTeamName}
+                onChange={(e) => setDraftTeamName(e.target.value)}
+                placeholder="Team name"
+              />
+              <button type="submit">Save</button>
+              <button type="button" onClick={cancelEditingTeamName}>Cancel</button>
+            </form>
+          ) : (
+            <p>
+              Team: {authSession.teamName || authSession.teamEmail}
+              <button type="button" className="inline-edit-trigger" onClick={startEditingTeamName}>Edit</button>
+            </p>
+          )}
           <p>
             Active Game: {activeGameLabel} | Score {activeGameScore.us}-{activeGameScore.them}
           </p>
