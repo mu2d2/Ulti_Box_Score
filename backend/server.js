@@ -9,14 +9,45 @@ import syncRouter from "./routes/sync.js";
 import stateRouter from "./routes/state.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { deleteStatEvent } from "./routes/statEvents.js";
+import { createRateLimit } from "./middleware/rateLimit.js";
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 8787);
+const allowedOrigins = new Set(
+  String(process.env.ALLOWED_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+
+const authRateLimit = createRateLimit({
+  windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 60),
+  label: "auth",
+});
+
+const syncRateLimit = createRateLimit({
+  windowMs: Number(process.env.SYNC_RATE_LIMIT_WINDOW_MS || 60 * 1000),
+  max: Number(process.env.SYNC_RATE_LIMIT_MAX || 120),
+  label: "sync",
+});
+
+app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "1mb" }));
 
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+
+  if (origin && !allowedOrigins.has(origin)) {
+    return res.status(403).json({ error: "Origin not allowed." });
+  }
+
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -33,7 +64,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── Auth routes ───────────────────────────────────────────────────────────────
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authRateLimit, authRouter);
 
 // ── Protected data routes ─────────────────────────────────────────────────────
 app.use("/api/players", playersRouter);
@@ -42,7 +73,7 @@ app.use("/api/games", gamesRouter);
 app.use("/api/games/:gameId/points", pointsRouter);
 app.use("/api/games/:gameId/stat-events", statEventsRouter);
 app.delete("/api/stat-events/:id", requireAuth, deleteStatEvent);
-app.use("/api/sync", syncRouter);
+app.use("/api/sync", syncRateLimit, syncRouter);
 app.use("/api/state", stateRouter);
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
