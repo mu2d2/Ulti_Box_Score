@@ -210,11 +210,17 @@ export default function App() {
 
     // Seed immediately from localStorage so the UI is never blank,
     // then try to hydrate from the server and replace if successful.
+    const pendingCount = readQueue(authSession.teamScopeKey).length;
     setState(buildInitialState(loadGameState(authSession.teamScopeKey)));
-    setSyncQueueSize(readQueue(authSession.teamScopeKey).length);
+    setSyncQueueSize(pendingCount);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
     setActivePage("box-score");
+
+    if (pendingCount > 0) {
+      // Keep local state while unsynced actions exist; server state may be stale.
+      return;
+    }
 
     apiClient.getState().then((serverState) => {
       if (!serverState) return;
