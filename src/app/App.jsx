@@ -965,10 +965,6 @@ export default function App() {
     setState(next);
   }
 
-  if (!authSession?.teamScopeKey) {
-    return <SignInPage onGoogleCredential={handleGoogleCredential} />;
-  }
-
   const activeLineupName = selectedBoxScoreLineupIds
     .map((id) => state.lineupGroups.find((lineup) => lineup.id === id)?.name)
     .filter(Boolean)
@@ -1070,6 +1066,10 @@ export default function App() {
     }
     return totals;
   }, [activeGameData.statEvents]);
+
+  if (!authSession?.teamScopeKey) {
+    return <SignInPage onGoogleCredential={handleGoogleCredential} />;
+  }
 
   return (
     <main className="layout">
