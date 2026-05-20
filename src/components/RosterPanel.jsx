@@ -244,7 +244,7 @@ export function RosterPanel({
           onChange={(event) => setForm((prev) => ({ ...prev, age: event.target.value }))}
         />
         <label className="required-field">
-          <span>Matching Player Type <span className="required-star">*</span></span>
+          <span>Player Type <span className="required-star">*</span></span>
           <select
             value={form.matchPlayerType}
             onChange={(event) =>
