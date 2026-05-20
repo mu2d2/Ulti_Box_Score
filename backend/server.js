@@ -1,76 +1,45 @@
-import crypto from "node:crypto";
 import express from "express";
-import { verifyGoogleIdToken } from "./auth/googleVerify.js";
+import authRouter from "./routes/auth.js";
+import playersRouter from "./routes/players.js";
+import lineupGroupsRouter from "./routes/lineupGroups.js";
+import gamesRouter from "./routes/games.js";
+import pointsRouter from "./routes/points.js";
+import statEventsRouter from "./routes/statEvents.js";
+import syncRouter from "./routes/sync.js";
+import stateRouter from "./routes/state.js";
+import { requireAuth } from "./middleware/requireAuth.js";
+import { deleteStatEvent } from "./routes/statEvents.js";
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 8787);
 
 app.use(express.json({ limit: "1mb" }));
 
-function requiredSessionSecret() {
-  const secret = process.env.APP_SESSION_SECRET || "";
-  if (!secret) {
-    throw new Error("APP_SESSION_SECRET is not configured.");
-  }
-  return secret;
-}
-
-function base64Url(input) {
-  return Buffer.from(input).toString("base64url");
-}
-
-function signSessionToken(payload) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const encodedHeader = base64Url(JSON.stringify(header));
-  const encodedPayload = base64Url(JSON.stringify(payload));
-  const data = `${encodedHeader}.${encodedPayload}`;
-
-  const signature = crypto
-    .createHmac("sha256", requiredSessionSecret())
-    .update(data)
-    .digest("base64url");
-
-  return `${data}.${signature}`;
-}
-
+// ── Health check (no auth) ────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/auth/google/verify", async (req, res) => {
-  try {
-    const credential = String(req.body?.credential || "").trim();
-    const nonce = String(req.body?.nonce || "").trim();
+// ── Auth routes ───────────────────────────────────────────────────────────────
+app.use("/api/auth", authRouter);
 
-    if (!credential) {
-      return res.status(400).json({ error: "credential is required" });
-    }
+// ── Protected data routes ─────────────────────────────────────────────────────
+app.use("/api/players", playersRouter);
+app.use("/api/lineup-groups", lineupGroupsRouter);
+app.use("/api/games", gamesRouter);
+app.use("/api/games/:gameId/points", pointsRouter);
+app.use("/api/games/:gameId/stat-events", statEventsRouter);
+app.delete("/api/stat-events/:id", requireAuth, deleteStatEvent);
+app.use("/api/sync", syncRouter);
+app.use("/api/state", stateRouter);
 
-    const verified = await verifyGoogleIdToken(credential, nonce || undefined);
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const appExpirySec = nowSec + 60 * 60 * 12;
-    const appToken = signSessionToken({
-      sub: verified.sub,
-      email: verified.email,
-      iat: nowSec,
-      exp: appExpirySec,
-      iss: "ulti-box-score-api",
-    });
-
-    return res.json({
-      teamEmail: verified.email,
-      teamName: verified.name,
-      picture: verified.picture,
-      authToken: appToken,
-      expiresAt: new Date(appExpirySec * 1000).toISOString(),
-    });
-  } catch (error) {
-    return res.status(401).json({ error: error.message || "Google token verification failed." });
-  }
+// ── 404 catch-all ─────────────────────────────────────────────────────────────
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not found." });
 });
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`Auth API listening on http://localhost:${PORT}`);
+  console.log(`API server listening on http://localhost:${PORT}`);
 });
+

@@ -35,7 +35,20 @@ The stack below was chosen to minimize complexity for a first-time web developer
 | Target Browsers | Safari, Chrome, Brave | — |
 
 > **Note for v1:** React handles the UI and offline logic; Django serves a REST API and persists data to PostgreSQL. The two communicate over HTTP/JSON. This separation keeps concerns clean and allows the frontend and backend to evolve independently.
+@@
+| Layer | Technology | Rationale |
+|---|---|---|
+| Frontend | **React** (Vite) | Component-based UI, large ecosystem, beginner-friendly with strong tooling |
+| Offline-first | `localStorage` + action queue | Stat entry works without internet; queue replayed to server on reconnect |
+| Backend | **Node.js** + **Express 4** | Same language as frontend, minimal boilerplate, ESM throughout |
+| Database | **PostgreSQL** | Relational model fits structured game/player/stat data; free and widely hosted |
+| Auth | **Google Identity Services** (OIDC) + HMAC-HS256 session tokens | No password management; token verified server-side against `APP_SESSION_SECRET` |
+| Version Control | **Git** | — |
+| Target Browsers | Safari, Chrome, Brave | — |
 
+> **Note for v1:** React handles the UI and offline action queue; Express serves a REST API backed by PostgreSQL. The frontend seeds from `localStorage` immediately on login and then hydrates from `GET /api/state` in the background. All mutations are queued locally and flushed to Postgres via `POST /api/sync`.
+
+> See [docs/implementation/postgres_backend.md](../implementation/postgres_backend.md) for the full backend implementation reference.
 ---
 
 ## Data Model

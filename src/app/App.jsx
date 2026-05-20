@@ -206,12 +206,72 @@ export default function App() {
       return;
     }
 
+    // Seed immediately from localStorage so the UI is never blank,
+    // then try to hydrate from the server and replace if successful.
     setState(buildInitialState(loadGameState(authSession.teamScopeKey)));
     setSyncQueueSize(readQueue(authSession.teamScopeKey).length);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
     setActivePage("box-score");
+
+    apiClient.getState().then((serverState) => {
+      if (!serverState) return;
+      const hydrated = buildInitialState(serverState);
+      setState(hydrated);
+      saveGameState(authSession.teamScopeKey, serverState);
+    }).catch(() => {
+      // Server unavailable — continue with localStorage data (offline-first).
+    });
   }, [authSession?.teamScopeKey]);
+
+  useEffect(() => {
+    const scopeKey = authSession?.teamScopeKey;
+    if (!scopeKey || syncQueueSize === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    let isSyncing = false;
+
+    const trySync = async () => {
+      if (cancelled || isSyncing) {
+        return;
+      }
+
+      const pending = readQueue(scopeKey);
+      if (pending.length === 0) {
+        setSyncQueueSize(0);
+        return;
+      }
+
+      isSyncing = true;
+      try {
+        await apiClient.sync(pending);
+        if (cancelled) {
+          return;
+        }
+        clearQueue(scopeKey);
+        setSyncQueueSize(0);
+      } catch {
+        // Keep queue intact; retry on interval/online event.
+      } finally {
+        isSyncing = false;
+      }
+    };
+
+    void trySync();
+    const intervalId = window.setInterval(() => {
+      void trySync();
+    }, 5000);
+
+    window.addEventListener("online", trySync);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("online", trySync);
+    };
+  }, [authSession?.teamScopeKey, syncQueueSize]);
 
   async function handleGoogleCredential(credential) {
     const nonce = window.sessionStorage.getItem("ulti-box-score-auth-nonce");
@@ -268,6 +328,8 @@ export default function App() {
     setAuthSession(updated);
     setIsEditingTeamName(false);
     setDraftTeamName("");
+    enqueueAction(authSession?.teamScopeKey, { type: "TEAM_NAME_UPDATED", payload: { teamName: trimmed } });
+    setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
   }
 
   function updateStateWithQueue(nextState, action) {
@@ -605,7 +667,10 @@ export default function App() {
       },
     };
 
-    updateStateWithQueue(next, { type: "STAT_EVENT_CREATED", payload: event });
+    updateStateWithQueue(next, {
+      type: "STAT_EVENT_CREATED",
+      payload: { ...event, gameId: activeGameId },
+    });
   }
 
   function decrementStat(playerId, statType) {
@@ -685,6 +750,9 @@ export default function App() {
       nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
     }
 
+    const pointId = createId("pt");
+    const pointCreatedAt = new Date().toISOString();
+
     const next = {
       ...state,
       gameDataById: {
@@ -695,10 +763,10 @@ export default function App() {
           pointResults: [
             ...activeGameData.pointResults,
             {
-              id: createId("pt"),
+              id: pointId,
               pointNumber: activeGameData.pointNumber,
               didWeScore,
-              createdAt: new Date().toISOString(),
+              createdAt: pointCreatedAt,
             },
           ],
           pointNumber: activeGameData.pointNumber + 1,
@@ -709,7 +777,14 @@ export default function App() {
 
     updateStateWithQueue(next, {
       type: "POINT_COMMITTED",
-      payload: { gameId: activeGameId, pointNumber: activeGameData.pointNumber, didWeScore },
+      payload: {
+        gameId: activeGameId,
+        pointId,
+        pointNumber: activeGameData.pointNumber,
+        didWeScore,
+        playerIds: activeGameData.currentOnFieldPlayerIds,
+        createdAt: pointCreatedAt,
+      },
     });
   }
 
