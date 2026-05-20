@@ -44,7 +44,7 @@ export function OnFieldPanel({
   return (
     <section className="panel">
       <div className="panel-header">
-        <h2>Live Entry: Point {pointNumber}</h2>
+        <h2 className="key-view-title">Live Entry: Point {pointNumber}</h2>
         <div className="inline-actions">
           <button type="button" onClick={onUndo}>Undo Last Event</button>
           <button

@@ -3,7 +3,7 @@ export function BoxScoreTable({ rows, activeLineupName, pointResults = [] }) {
   return (
     <>
     <section className="panel">
-      <h2>Box Score ({activeLineupName})</h2>
+      <h2 className="key-view-title">Box Score ({activeLineupName})</h2>
       <div className="table-wrap">
         <table>
           <thead>

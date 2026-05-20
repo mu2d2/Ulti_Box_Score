@@ -182,7 +182,7 @@ export function RosterPanel({
     <section className="panel">
       <div className="panel-title-row">
         <div>
-          <h2>Roster Entry</h2>
+          <h2 className="key-view-title">Roster Entry</h2>
           <p className="help-text roster-required-note">
             Required fields: name, position, offense/defense role, and matching-player type.
           </p>

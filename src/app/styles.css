@@ -3,6 +3,7 @@
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: #f2f5f3;
   color: #122116;
+  font-size: 17px;
 }
 
 * {
@@ -12,6 +13,7 @@
 body {
   margin: 0;
   background: radial-gradient(circle at top, #ffffff 0%, #e8efe9 58%, #dbe6de 100%);
+  line-height: 1.45;
 }
 
 .layout {
@@ -36,13 +38,20 @@ body {
   background: #2d6a4f;
   border-radius: 999px;
   padding: 6px 12px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.header-actions .secondary-button,
+.header-actions .danger-button {
+  padding: 6px 9px;
+  font-size: 0.82rem;
+  border-radius: 7px;
 }
 
 .secondary-button {
@@ -53,6 +62,7 @@ body {
   background: #d8f3dc;
   color: #081c15;
   font-weight: 700;
+  font-size: 0.95rem;
 }
 
 .secondary-button:disabled {
@@ -93,6 +103,7 @@ body {
   background: #ffe3e3;
   color: #8c1c13;
   font-weight: 700;
+  font-size: 0.95rem;
 }
 
 .panel {
@@ -100,6 +111,14 @@ body {
   border: 1px solid #d7e2da;
   border-radius: 12px;
   padding: 12px;
+}
+
+.key-view-title {
+  margin: 0;
+  font-size: clamp(1.2rem, 1rem + 1vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #123b2d;
 }
 
 .auth-layout {
@@ -212,6 +231,7 @@ body {
 
 .help-text {
   margin: 8px 0;
+  font-size: 0.98rem;
 }
 
 .on-field-grid {
@@ -353,6 +373,7 @@ td {
   border-bottom: 1px solid #ecf2ed;
   text-align: left;
   padding: 8px;
+  font-size: 0.95rem;
 }
 
 .roster-form {
@@ -402,7 +423,7 @@ td {
 
 .required-field span {
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: 0.94rem;
   line-height: 1.1;
 }
 
@@ -446,7 +467,7 @@ td {
 
 .game-card p {
   margin: 4px 0 0;
-  font-size: 0.92rem;
+  font-size: 0.97rem;
 }
 
 .games-score-line {
