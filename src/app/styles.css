@@ -55,6 +55,11 @@ body {
   font-weight: 700;
 }
 
+.secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .inline-edit-trigger {
   margin-left: 8px;
   padding: 2px 8px;

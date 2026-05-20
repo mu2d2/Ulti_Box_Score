@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RosterPanel } from "../components/RosterPanel";
 import { GamesPanel } from "../components/GamesPanel";
 import { OnFieldPanel } from "../components/OnFieldPanel";
@@ -181,6 +181,8 @@ export default function App() {
   const [selectedLiveEntryLineupIds, setSelectedLiveEntryLineupIds] = useState(["lineup-all"]);
   const [activePage, setActivePage] = useState("games");
   const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue(authSession?.teamScopeKey).length);
+  const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [draftTeamName, setDraftTeamName] = useState("");
 
@@ -225,37 +227,59 @@ export default function App() {
   }, [authSession?.teamScopeKey]);
 
   useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  const syncPendingQueue = useCallback(async () => {
     const scopeKey = authSession?.teamScopeKey;
-    if (!scopeKey || syncQueueSize === 0) {
+    if (!scopeKey || !window.navigator.onLine || isSyncingQueue) {
+      return false;
+    }
+
+    const pending = readQueue(scopeKey);
+    if (pending.length === 0) {
+      setSyncQueueSize(0);
+      return true;
+    }
+
+    setIsSyncingQueue(true);
+    try {
+      await apiClient.sync(pending);
+      clearQueue(scopeKey);
+      setSyncQueueSize(0);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setIsSyncingQueue(false);
+    }
+  }, [authSession?.teamScopeKey, isSyncingQueue]);
+
+  useEffect(() => {
+    const scopeKey = authSession?.teamScopeKey;
+    if (!scopeKey || syncQueueSize === 0 || !isOnline) {
       return;
     }
 
     let cancelled = false;
-    let isSyncing = false;
 
     const trySync = async () => {
-      if (cancelled || isSyncing) {
+      if (cancelled || !window.navigator.onLine) {
         return;
       }
 
-      const pending = readQueue(scopeKey);
-      if (pending.length === 0) {
-        setSyncQueueSize(0);
+      await syncPendingQueue();
+      if (cancelled) {
         return;
-      }
-
-      isSyncing = true;
-      try {
-        await apiClient.sync(pending);
-        if (cancelled) {
-          return;
-        }
-        clearQueue(scopeKey);
-        setSyncQueueSize(0);
-      } catch {
-        // Keep queue intact; retry on interval/online event.
-      } finally {
-        isSyncing = false;
       }
     };
 
@@ -271,7 +295,15 @@ export default function App() {
       window.clearInterval(intervalId);
       window.removeEventListener("online", trySync);
     };
-  }, [authSession?.teamScopeKey, syncQueueSize]);
+  }, [authSession?.teamScopeKey, isOnline, syncPendingQueue, syncQueueSize]);
+
+  async function handleSyncNow() {
+    if (!window.navigator.onLine) {
+      return;
+    }
+
+    await syncPendingQueue();
+  }
 
   async function handleGoogleCredential(credential) {
     const nonce = window.sessionStorage.getItem("ulti-box-score-auth-nonce");
@@ -967,7 +999,20 @@ export default function App() {
           </p>
         </div>
         <div className="header-actions">
-          <div className="sync-pill">Pending Sync: {syncQueueSize}</div>
+          <div className="sync-pill">
+            Pending Sync: {syncQueueSize} {isOnline ? "" : "(Offline)"}
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              void handleSyncNow();
+            }}
+            disabled={!isOnline || syncQueueSize === 0 || isSyncingQueue}
+            title={!isOnline ? "Internet connection required" : "Flush queued actions now"}
+          >
+            {isSyncingQueue ? "Syncing..." : "Sync Now"}
+          </button>
           <button type="button" className="secondary-button" onClick={handleSignOut}>
             Sign Out
           </button>

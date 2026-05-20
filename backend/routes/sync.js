@@ -33,7 +33,10 @@ router.post("/", async (req, res) => {
       for (const action of actions) {
         const { type, payload } = action;
 
-        switch (type) {
+        try {
+          await client.query("SAVEPOINT action_sp");
+
+          switch (type) {
           case "PLAYER_ADDED": {
             const p = payload;
             await client.query(
@@ -167,11 +170,15 @@ router.post("/", async (req, res) => {
 
           case "STAT_EVENT_CREATED": {
             const e = payload;
+            if (!e?.gameId || !e?.playerId || !e?.pointNumber || !e?.statType) {
+              skipped++;
+              break;
+            }
             await client.query(
               `INSERT INTO stat_events (id, game_id, point_number, player_id, stat_type, created_at)
                VALUES ($1, $2, $3, $4, $5, $6)
                ON CONFLICT (id) DO NOTHING`,
-              [e.id, e.gameId || null, e.pointNumber, e.playerId, e.statType, e.createdAt || new Date().toISOString()]
+              [e.id, e.gameId, e.pointNumber, e.playerId, e.statType, e.createdAt || new Date().toISOString()]
             );
             applied++;
             break;
@@ -191,6 +198,10 @@ router.post("/", async (req, res) => {
 
           case "POINT_COMMITTED": {
             const { gameId, pointNumber, didWeScore, playerIds = [], pointId, createdAt } = payload;
+            if (!gameId || !pointNumber) {
+              skipped++;
+              break;
+            }
             // pointId may be absent in older queue entries — use a deterministic fallback.
             const resolvedPointId = pointId || `pt-${gameId}-${pointNumber}`;
 
@@ -223,6 +234,12 @@ router.post("/", async (req, res) => {
 
           default:
             skipped++;
+          }
+
+          await client.query("RELEASE SAVEPOINT action_sp");
+        } catch {
+          await client.query("ROLLBACK TO SAVEPOINT action_sp");
+          skipped++;
         }
       }
 
