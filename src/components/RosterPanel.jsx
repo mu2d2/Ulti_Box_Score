@@ -184,7 +184,7 @@ export function RosterPanel({
         <div>
           <h2>Roster Entry</h2>
           <p className="help-text roster-required-note">
-            Required fields: name, position, offense/defense role, and matching-player type (MMP or WMP).
+            Required fields: name, position, offense/defense role, and matching-player type.
           </p>
         </div>
         <button type="button" className="danger-button" onClick={onClearRoster}>
