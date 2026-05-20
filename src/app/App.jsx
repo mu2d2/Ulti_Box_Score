@@ -55,6 +55,16 @@ function createEmptyGameData() {
   };
 }
 
+function createDefaultGame() {
+  return {
+    id: "game-1",
+    name: "Game 1",
+    opponent: "",
+    isCompleted: false,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function buildScoreFromPointResults(pointResults) {
   return pointResults.reduce(
     (score, result) => {
@@ -72,15 +82,7 @@ function buildInitialState(local) {
     return {
       ...initialState,
       lineupGroups: DEFAULT_LINEUP_GROUPS,
-      games: [
-        {
-          id: "game-1",
-          name: "Game 1",
-          opponent: "",
-          isCompleted: false,
-          createdAt: new Date().toISOString(),
-        },
-      ],
+      games: [createDefaultGame()],
       activeGameId: "game-1",
       gameDataById: {
         "game-1": createEmptyGameData(),
@@ -262,6 +264,15 @@ export default function App() {
       await apiClient.sync(pending);
       clearQueue(scopeKey);
       setSyncQueueSize(0);
+      // Re-hydrate from server after a successful flush so the UI reflects
+      // any data that was committed for the first time (e.g. games created
+      // while offline that are now in the DB).
+      apiClient.getState().then((serverState) => {
+        if (!serverState) return;
+        const hydrated = buildInitialState(serverState);
+        setState(hydrated);
+        saveGameState(scopeKey, serverState);
+      }).catch(() => {});
       return true;
     } catch {
       return false;
@@ -401,6 +412,87 @@ export default function App() {
       type: "PLAYER_UPDATED",
       payload: { playerId, updates },
     });
+  }
+
+  function removePlayer(playerId) {
+    const next = {
+      ...state,
+      players: state.players.filter((player) => player.id !== playerId),
+      lineupMembership: Object.fromEntries(
+        Object.entries(state.lineupMembership).filter(([id]) => id !== playerId)
+      ),
+      gameDataById: Object.fromEntries(
+        Object.entries(state.gameDataById).map(([gameId, gameData]) => {
+          const filteredOnField = (gameData.currentOnFieldPlayerIds || []).filter(
+            (id) => id !== playerId
+          );
+          const filteredPointsPlayed = { ...(gameData.playerPointsPlayed || {}) };
+          delete filteredPointsPlayed[playerId];
+
+          return [
+            gameId,
+            {
+              ...gameData,
+              currentOnFieldPlayerIds: filteredOnField,
+              playerPointsPlayed: filteredPointsPlayed,
+            },
+          ];
+        })
+      ),
+    };
+
+    updateStateWithQueue(next, {
+      type: "PLAYER_DELETED",
+      payload: { playerId },
+    });
+  }
+
+  function clearLineups() {
+    const confirmed = window.confirm(
+      "Remove all custom lineup groups? The All / O-Line / D-Line defaults will be kept."
+    );
+    if (!confirmed) return;
+
+    const defaultIds = new Set(DEFAULT_LINEUP_GROUPS.map((g) => g.id));
+    const nextMembership = Object.fromEntries(
+      Object.entries(state.lineupMembership).map(([playerId, ids]) => [
+        playerId,
+        ids.filter((id) => defaultIds.has(id)),
+      ])
+    );
+
+    const next = {
+      ...state,
+      lineupGroups: DEFAULT_LINEUP_GROUPS,
+      lineupMembership: nextMembership,
+    };
+
+    updateStateWithQueue(next, { type: "LINEUPS_CLEARED", payload: {} });
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+  }
+
+  async function clearDatabase() {
+    const confirmed = window.confirm(
+      "Delete ALL data from the database? This removes every player, game, and stat permanently and cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+      await apiClient.clearAccountData();
+    } catch {
+      alert("Failed to clear server data. Check your connection and try again.");
+      return;
+    }
+
+    clearQueue(authSession?.teamScopeKey);
+    setSyncQueueSize(0);
+    const freshState = buildInitialState(null);
+    setState(freshState);
+    saveGameState(authSession?.teamScopeKey, freshState);
+    setSelectedLiveEntryLineupIds(["lineup-all"]);
+    setSelectedBoxScoreLineupIds(["lineup-all"]);
+    setActivePage("games");
   }
 
   function createLineupGroup(name, playerIds) {
@@ -779,7 +871,7 @@ export default function App() {
   }
 
   function commitPointAndAdvance(didWeScore) {
-    if (!activeGameId || activeGameData.currentOnFieldPlayerIds.length === 0) {
+    if (!activeGameId || activeGameData.currentOnFieldPlayerIds.length !== 7) {
       return;
     }
 
@@ -1025,6 +1117,9 @@ export default function App() {
           <button type="button" className="danger-button" onClick={clearHistory}>
             Clear History
           </button>
+          <button type="button" className="danger-button" onClick={() => { void clearDatabase(); }}>
+            Clear Database
+          </button>
         </div>
       </header>
 
@@ -1081,6 +1176,8 @@ export default function App() {
           onCreateLineupGroup={createLineupGroup}
           onUpdateLineupGroup={updateLineupGroup}
           onClearRoster={clearRoster}
+          onRemovePlayer={removePlayer}
+          onClearLineups={clearLineups}
         />
       ) : null}
 
@@ -1112,7 +1209,6 @@ export default function App() {
             onUndo={undoLastEvent}
             onCommitPoint={commitPointAndAdvance}
             pointNumber={activeGameData.pointNumber}
-            pointResults={pointResultLog}
           />
 
           <section className="panel">
@@ -1142,7 +1238,7 @@ export default function App() {
             <p className="help-text">Select one or more lineup groups to combine box score views.</p>
           </section>
 
-          <BoxScoreTable rows={rows} activeLineupName={activeLineupName} />
+        <BoxScoreTable rows={rows} activeLineupName={activeLineupName} pointResults={pointResultLog} />
         </>
       ) : null}
     </main>

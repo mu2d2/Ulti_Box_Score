@@ -11,7 +11,6 @@ export function OnFieldPanel({
   onUndo,
   onCommitPoint,
   pointNumber,
-  pointResults = [],
 }) {
   const [pressedButtons, setPressedButtons] = useState({});
   const timeoutRef = useRef({});
@@ -47,13 +46,37 @@ export function OnFieldPanel({
       <div className="panel-header">
         <h2>Live Entry: Point {pointNumber}</h2>
         <div className="inline-actions">
-          <button onClick={onUndo}>Undo Last Event</button>
-          <button onClick={() => onCommitPoint(true)}>Point Won (Goal)</button>
-          <button onClick={() => onCommitPoint(false)}>Point Lost</button>
+          <button type="button" onClick={onUndo}>Undo Last Event</button>
+          <button
+            type="button"
+            onClick={() => onCommitPoint(true)}
+            disabled={onFieldPlayerIds.length !== 7}
+            title={onFieldPlayerIds.length !== 7 ? `Select exactly 7 players (${onFieldPlayerIds.length}/7 selected)` : "Commit point as our goal"}
+          >
+            Point Won (Goal)
+          </button>
+          <button
+            type="button"
+            onClick={() => onCommitPoint(false)}
+            disabled={onFieldPlayerIds.length !== 7}
+            title={onFieldPlayerIds.length !== 7 ? `Select exactly 7 players (${onFieldPlayerIds.length}/7 selected)` : "Commit point as opponent goal"}
+          >
+            Point Lost
+          </button>
         </div>
       </div>
 
-      <p className="help-text">Select exactly 7 players on-field, then tap a stat button.</p>
+      <div className="on-field-status">
+        <span className={`on-field-count ${onFieldPlayerIds.length === 7 ? "on-field-count-ready" : "on-field-count-pending"}`}>
+          {onFieldPlayerIds.length}/7 players selected
+          {onFieldPlayerIds.length === 7 ? " — ready to end point!" : ""}
+        </span>
+        <p className="help-text">
+          Ultimate Frisbee is played 7-on-7, so the app requires exactly 7 players before you can
+          end a point. Select the full line on the field first, then record stats and finish the
+          point so points played and box score totals stay accurate.
+        </p>
+      </div>
 
       {players.length === 0 ? (
         <p className="help-text">No players in this lineup group. Choose another filter or add players to the group.</p>
@@ -115,26 +138,6 @@ export function OnFieldPanel({
         })}
       </div>
 
-      <section className="game-log">
-        <h3>Game Log</h3>
-        {pointResults.length === 0 ? (
-          <p className="help-text">No completed points yet.</p>
-        ) : (
-          <ul className="game-log-list">
-            {[...pointResults].reverse().map((result) => (
-              <li key={result.id} className="game-log-item">
-                <span className={`point-outcome ${result.didWeScore ? "outcome-us" : "outcome-them"}`}>
-                  {result.didWeScore ? "Our Goal" : "Their Goal"}
-                </span>
-                <span>Point {result.pointNumber}</span>
-                <span className="point-score-visual">
-                  {result.usScore} - {result.themScore}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </section>
   );
 }

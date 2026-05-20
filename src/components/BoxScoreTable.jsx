@@ -1,6 +1,7 @@
 import React from "react";
-export function BoxScoreTable({ rows, activeLineupName }) {
+export function BoxScoreTable({ rows, activeLineupName, pointResults = [] }) {
   return (
+    <>
     <section className="panel">
       <h2>Box Score ({activeLineupName})</h2>
       <div className="table-wrap">
@@ -34,5 +35,26 @@ export function BoxScoreTable({ rows, activeLineupName }) {
         </table>
       </div>
     </section>
+    <section className="panel game-log">
+      <h3>Game Log</h3>
+      {pointResults.length === 0 ? (
+        <p className="help-text">No completed points yet. Points appear here as the game progresses.</p>
+      ) : (
+        <ul className="game-log-list">
+          {[...pointResults].reverse().map((result) => (
+            <li key={result.id} className="game-log-item">
+              <span className={`point-outcome ${result.didWeScore ? "outcome-us" : "outcome-them"}`}>
+                {result.didWeScore ? "Our Goal" : "Their Goal"}
+              </span>
+              <span>Point {result.pointNumber}</span>
+              <span className="point-score-visual">
+                {result.usScore} – {result.themScore}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </>
   );
 }

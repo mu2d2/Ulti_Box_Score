@@ -155,4 +155,13 @@ export const apiClient = {
       body: JSON.stringify({ actions }),
     });
   },
+
+  // ── Account management ────────────────────────────────────────────────────
+  /**
+   * Deletes all account data (players, games, stats, lineups) from the server.
+   * The login/account row itself is preserved.
+   */
+  clearAccountData() {
+    return request("/account/data", { method: "DELETE" });
+  },
 };

@@ -11,6 +11,8 @@ export function RosterPanel({
   onCreateLineupGroup,
   onUpdateLineupGroup,
   onClearRoster,
+  onRemovePlayer,
+  onClearLineups,
 }) {
   const [form, setForm] = useState({
     name: "",
@@ -107,7 +109,7 @@ export function RosterPanel({
 
   function createLineup(event) {
     event.preventDefault();
-    if (!lineupName.trim() || selectedLineupPlayers.length === 0) {
+    if (!lineupName.trim()) {
       return;
     }
 
@@ -185,11 +187,18 @@ export function RosterPanel({
         </button>
       </div>
       <form className="roster-form" onSubmit={handleSubmit}>
-        <input
-          placeholder="Player name"
-          value={form.name}
-          onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-        />
+        <p className="help-text roster-required-note">
+          Required fields: name, position, offense/defense role, and matching-player type (MMP or WMP).
+        </p>
+        <label className="required-field">
+          <span>Name <span className="required-star">*</span></span>
+          <input
+            placeholder="Player name"
+            value={form.name}
+            required
+            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+          />
+        </label>
         <input
           placeholder="Jersey #"
           value={form.jerseyNumber}
@@ -197,27 +206,34 @@ export function RosterPanel({
             setForm((prev) => ({ ...prev, jerseyNumber: event.target.value }))
           }
         />
-        <select
-          value={form.position}
-          onChange={(event) => setForm((prev) => ({ ...prev, position: event.target.value }))}
-        >
-          <option value="">Select Position</option>
-          {POSITIONS.map((pos) => (
-            <option key={pos} value={pos}>
-              {pos}
-            </option>
-          ))}
-        </select>
-        <select
-          value={form.role}
-          onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
-        >
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
+        <label className="required-field">
+          <span>Position <span className="required-star">*</span></span>
+          <select
+            value={form.position}
+            required
+            onChange={(event) => setForm((prev) => ({ ...prev, position: event.target.value }))}
+          >
+            <option value="">Select Position</option>
+            {POSITIONS.map((pos) => (
+              <option key={pos} value={pos}>
+                {pos}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="required-field">
+          <span>Offense / Defense <span className="required-star">*</span></span>
+          <select
+            value={form.role}
+            onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
         <input
           placeholder="Age"
           type="number"
@@ -225,18 +241,21 @@ export function RosterPanel({
           value={form.age}
           onChange={(event) => setForm((prev) => ({ ...prev, age: event.target.value }))}
         />
-        <select
-          value={form.matchPlayerType}
-          onChange={(event) =>
-            setForm((prev) => ({ ...prev, matchPlayerType: event.target.value }))
-          }
-        >
-          {MATCH_PLAYER_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        <label className="required-field">
+          <span>Matching Player Type <span className="required-star">*</span></span>
+          <select
+            value={form.matchPlayerType}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, matchPlayerType: event.target.value }))
+            }
+          >
+            {MATCH_PLAYER_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {value === "MMP" ? "MMP (Mixed/Male Matching)" : "WMP (Women Matching)"}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="submit">Add Player</button>
       </form>
 
@@ -327,9 +346,22 @@ export function RosterPanel({
                 <span>{player.position || "Unassigned"}</span>
                 <span>{player.role}</span>
                 <span>{player.matchPlayerType}</span>
-                <button type="button" onClick={() => startEditing(player)}>
-                  Edit
-                </button>
+                <div className="player-chip-actions">
+                  <button type="button" onClick={() => startEditing(player)}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => {
+                      if (window.confirm(`Remove ${player.name} from the roster?`)) {
+                        onRemovePlayer(player.id);
+                      }
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -337,7 +369,12 @@ export function RosterPanel({
       </div>
 
       <section className="lineup-builder">
-        <h3>Create Lineup Group</h3>
+        <div className="panel-title-row">
+          <h3>Create Lineup Group</h3>
+          <button type="button" className="danger-button" onClick={onClearLineups}>
+            Clear Lineups
+          </button>
+        </div>
         <form className="lineup-form" onSubmit={createLineup}>
           <input
             placeholder="Lineup name (Alpha, Beta, etc.)"
@@ -346,6 +383,7 @@ export function RosterPanel({
           />
           <button type="submit">Create Lineup Tab</button>
         </form>
+        <p className="help-text">You can create a lineup tab before selecting any players.</p>
 
         <div className="lineup-player-picks">
           {players.map((player) => {

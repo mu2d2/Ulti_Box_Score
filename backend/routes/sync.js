@@ -223,6 +223,35 @@ router.post("/", async (req, res) => {
             break;
           }
 
+          case "PLAYER_DELETED": {
+            await client.query(
+              `UPDATE players SET is_deleted = TRUE, updated_at = NOW()
+               WHERE id = $1 AND account_id = $2`,
+              [payload.playerId, accountId]
+            );
+            applied++;
+            break;
+          }
+
+          case "LINEUPS_CLEARED": {
+            // Remove all non-built-in lineup groups and their memberships.
+            await client.query(
+              `DELETE FROM lineup_group_members
+               WHERE lineup_group_id IN (
+                 SELECT id FROM lineup_groups
+                 WHERE account_id = $1 AND id NOT LIKE 'lineup-%'
+               )`,
+              [accountId]
+            );
+            await client.query(
+              `DELETE FROM lineup_groups
+               WHERE account_id = $1 AND id NOT LIKE 'lineup-%'`,
+              [accountId]
+            );
+            applied++;
+            break;
+          }
+
           case "TEAM_NAME_UPDATED": {
             await client.query(
               "UPDATE accounts SET team_name = $1, updated_at = NOW() WHERE id = $2",

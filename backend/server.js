@@ -76,6 +76,47 @@ app.delete("/api/stat-events/:id", requireAuth, deleteStatEvent);
 app.use("/api/sync", syncRateLimit, syncRouter);
 app.use("/api/state", stateRouter);
 
+/**
+ * DELETE /api/account/data
+ * Wipes all game data, stats, players, and lineup groups for the authenticated account.
+ * The account itself (login) is preserved.
+ */
+app.delete("/api/account/data", requireAuth, async (req, res) => {
+  const { pool: dbPool } = await import("./db/pool.js");
+  try {
+    const { accountId } = req.tokenPayload;
+    const client = await dbPool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM stat_events WHERE game_id IN (SELECT id FROM games WHERE account_id = $1)`,
+        [accountId]
+      );
+      await client.query(
+        `DELETE FROM player_points WHERE point_id IN (SELECT id FROM points WHERE game_id IN (SELECT id FROM games WHERE account_id = $1))`,
+        [accountId]
+      );
+      await client.query(
+        `DELETE FROM points WHERE game_id IN (SELECT id FROM games WHERE account_id = $1)`,
+        [accountId]
+      );
+      await client.query("DELETE FROM games WHERE account_id = $1", [accountId]);
+      await client.query("DELETE FROM lineup_group_members WHERE lineup_group_id IN (SELECT id FROM lineup_groups WHERE account_id = $1)", [accountId]);
+      await client.query("DELETE FROM lineup_groups WHERE account_id = $1", [accountId]);
+      await client.query("DELETE FROM players WHERE account_id = $1", [accountId]);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found." });

@@ -101,6 +101,30 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/players/:id
+ * Soft-deletes a player (sets is_deleted = TRUE).
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { accountId } = req.tokenPayload;
+    const result = await pool.query(
+      `UPDATE players SET is_deleted = TRUE, updated_at = NOW()
+       WHERE id = $1 AND account_id = $2 AND is_deleted = FALSE
+       RETURNING id`,
+      [req.params.id, accountId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: "Player not found." });
+    }
+
+    return res.json({ id: req.params.id });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 function rowToPlayer(row) {
   return {
     id: row.id,
