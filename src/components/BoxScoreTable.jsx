@@ -10,7 +10,7 @@ export function BoxScoreTable({ rows, activeLineupName, pointResults = [] }) {
             <tr>
               <th>Player</th>
               <th>#</th>
-              <th>MP</th>
+              <th>PP</th>
               <th>G</th>
               <th>A</th>
               <th>T</th>

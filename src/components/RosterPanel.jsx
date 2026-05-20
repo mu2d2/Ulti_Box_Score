@@ -202,6 +202,7 @@ export function RosterPanel({
           />
         </label>
         <input
+          className="roster-aux-field"
           placeholder="Jersey #"
           value={form.jerseyNumber}
           onChange={(event) =>
@@ -237,6 +238,7 @@ export function RosterPanel({
           </select>
         </label>
         <input
+          className="roster-aux-field"
           placeholder="Age"
           type="number"
           min="0"

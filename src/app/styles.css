@@ -339,6 +339,10 @@ body {
   overflow-x: auto;
 }
 
+.table-wrap table {
+  min-width: 640px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -368,6 +372,10 @@ td {
   line-height: 1.2;
   width: 100%;
   min-width: 0;
+}
+
+.roster-aux-field {
+  align-self: end;
 }
 
 .roster-submit-button {
@@ -639,33 +647,159 @@ td {
   border-radius: 6px;
 }
 
-@media (max-width: 640px) {
-  .app-header {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 960px) {
+  .layout {
+    padding: 12px;
   }
 
-  .inline-actions {
+  .panel {
+    padding: 10px;
+  }
+
+  .app-header,
+  .panel-title-row,
+  .panel-header,
+  .game-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions,
+  .inline-actions,
+  .games-card-actions {
+    width: 100%;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .header-actions button,
+  .inline-actions button,
+  .games-card-actions button {
+    flex: 1 1 140px;
+  }
+
+  .page-nav,
+  .tab-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     width: 100%;
   }
 
-  .inline-actions button {
-    flex: 1;
-  }
-
-  .lineup-form {
-    grid-template-columns: 1fr;
+  .page-nav button,
+  .tab-row button {
+    width: 100%;
   }
 
   .games-form {
     grid-template-columns: 1fr;
   }
 
+  .games-form button {
+    width: 100%;
+  }
+
+  .roster-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .roster-submit-button {
+    grid-column: 1 / -1;
+  }
+
+  .lineup-form {
+    grid-template-columns: 1fr;
+  }
+
+  .lineup-form button {
+    width: 100%;
+  }
+
+  .stat-adjust-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-button-decrement {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .layout {
+    padding: 8px;
+  }
+
+  .app-header {
+    gap: 10px;
+  }
+
+  .header-actions,
+  .team-name-edit-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions button,
+  .team-name-edit-form input,
+  .team-name-edit-form button,
+  .page-nav button,
+  .tab-row button,
+  .games-form button,
+  .roster-submit-button {
+    width: 100%;
+  }
+
+  .page-nav,
+  .tab-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel-title-row,
+  .panel-header,
+  .game-card {
+    gap: 10px;
+  }
+
   .roster-form {
     grid-template-columns: 1fr;
   }
 
-  .header-actions {
+  .roster-form label,
+  .roster-form input,
+  .roster-form select,
+  .roster-submit-button,
+  .player-chip,
+  .games-edit-form,
+  .lineup-group-card {
     width: 100%;
+  }
+
+  .game-log-item {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .game-log-item > span:last-child {
+    justify-self: end;
+  }
+
+  .table-wrap {
+    margin-inline: -10px;
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  th,
+  td {
+    padding: 6px 8px;
+    font-size: 0.88rem;
+  }
+
+  .table-wrap table {
+    min-width: 580px;
+  }
+
+  .game-log-item {
+    gap: 6px;
   }
 }
