@@ -253,12 +253,14 @@ export function RosterPanel({
           >
             {MATCH_PLAYER_TYPES.map((value) => (
               <option key={value} value={value}>
-                {value === "MMP" ? "MMP (Mixed/Male Matching)" : "WMP (Women Matching)"}
+                {value}
               </option>
             ))}
           </select>
         </label>
-        <button type="submit">Add Player</button>
+        <button type="submit" className="roster-submit-button">
+          Add Player
+        </button>
       </form>
 
       <div className="player-list">

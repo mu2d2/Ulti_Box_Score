@@ -367,6 +367,12 @@ td {
   line-height: 1.2;
 }
 
+.roster-submit-button {
+  min-height: 44px;
+  height: 44px;
+  align-self: end;
+}
+
 .roster-form input::placeholder {
   color: #7d8b81;
 }
