@@ -181,15 +181,17 @@ export function RosterPanel({
   return (
     <section className="panel">
       <div className="panel-title-row">
-        <h2>Roster Entry</h2>
+        <div>
+          <h2>Roster Entry</h2>
+          <p className="help-text roster-required-note">
+            Required fields: name, position, offense/defense role, and matching-player type (MMP or WMP).
+          </p>
+        </div>
         <button type="button" className="danger-button" onClick={onClearRoster}>
           Clear Roster
         </button>
       </div>
       <form className="roster-form" onSubmit={handleSubmit}>
-        <p className="help-text roster-required-note">
-          Required fields: name, position, offense/defense role, and matching-player type (MMP or WMP).
-        </p>
         <label className="required-field">
           <span>Name <span className="required-star">*</span></span>
           <input
