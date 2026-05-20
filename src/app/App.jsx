@@ -185,6 +185,7 @@ export default function App() {
   const [syncQueueSize, setSyncQueueSize] = useState(() => readQueue(authSession?.teamScopeKey).length);
   const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
   const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+  const [showOptionsBar, setShowOptionsBar] = useState(false);
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [draftTeamName, setDraftTeamName] = useState("");
 
@@ -1096,31 +1097,40 @@ export default function App() {
             Active Game: {activeGameLabel} | Score {activeGameScore.us}-{activeGameScore.them}
           </p>
         </div>
-        <div className="header-actions">
-          <div className="sync-pill">
-            Pending Sync: {syncQueueSize} {isOnline ? "" : "(Offline)"}
+        <button
+          type="button"
+          className="options-toggle-button"
+          onClick={() => setShowOptionsBar(v => !v)}
+          title="Options"
+          aria-expanded={showOptionsBar}
+        >
+          &#9776;
+        </button>
+        {showOptionsBar && (
+          <div className="options-bar">
+            <div className="sync-pill">
+              Pending Sync: {syncQueueSize} {isOnline ? "" : "(Offline)"}
+            </div>
+            <button
+              type="button"
+              className="options-bar-button"
+              onClick={() => { void handleSyncNow(); }}
+              disabled={!isOnline || syncQueueSize === 0 || isSyncingQueue}
+              title={!isOnline ? "Internet connection required" : "Flush queued actions now"}
+            >
+              {isSyncingQueue ? "Syncing..." : "Sync Now"}
+            </button>
+            <button type="button" className="options-bar-button" onClick={handleSignOut}>
+              Sign Out
+            </button>
+            <button type="button" className="options-bar-button danger" onClick={clearHistory}>
+              Clear History
+            </button>
+            <button type="button" className="options-bar-button danger" onClick={() => { void clearDatabase(); }}>
+              Clear Database
+            </button>
           </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              void handleSyncNow();
-            }}
-            disabled={!isOnline || syncQueueSize === 0 || isSyncingQueue}
-            title={!isOnline ? "Internet connection required" : "Flush queued actions now"}
-          >
-            {isSyncingQueue ? "Syncing..." : "Sync Now"}
-          </button>
-          <button type="button" className="secondary-button" onClick={handleSignOut}>
-            Sign Out
-          </button>
-          <button type="button" className="danger-button" onClick={clearHistory}>
-            Clear History
-          </button>
-          <button type="button" className="danger-button" onClick={() => { void clearDatabase(); }}>
-            Clear Database
-          </button>
-        </div>
+        )}
       </header>
 
       <section className="panel lineup-tabs">
