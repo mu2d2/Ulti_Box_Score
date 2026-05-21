@@ -55,16 +55,6 @@ function createEmptyGameData() {
   };
 }
 
-function createDefaultGame() {
-  return {
-    id: "game-1",
-    name: "Game 1",
-    opponent: "",
-    isCompleted: false,
-    createdAt: new Date().toISOString(),
-  };
-}
-
 function buildScoreFromPointResults(pointResults) {
   return pointResults.reduce(
     (score, result) => {
@@ -82,18 +72,18 @@ function buildInitialState(local) {
     return {
       ...initialState,
       lineupGroups: DEFAULT_LINEUP_GROUPS,
-      games: [createDefaultGame()],
-      activeGameId: "game-1",
-      gameDataById: {
-        "game-1": createEmptyGameData(),
-      },
     };
   }
 
   const players = Array.isArray(local.players) ? local.players : [];
   const lineupGroups =
     Array.isArray(local.lineupGroups) && local.lineupGroups.length > 0
-      ? local.lineupGroups
+      ? [
+          ...DEFAULT_LINEUP_GROUPS,
+          ...local.lineupGroups.filter(
+            (group) => !DEFAULT_LINEUP_GROUPS.some((defaultGroup) => defaultGroup.id === group.id)
+          ),
+        ]
       : DEFAULT_LINEUP_GROUPS;
   const lineupMembership =
     local.lineupMembership && typeof local.lineupMembership === "object"
@@ -102,13 +92,13 @@ function buildInitialState(local) {
 
   const hasMultiGame = Array.isArray(local.games) && local.gameDataById;
   if (hasMultiGame) {
-    const games = (local.games.length > 0 ? local.games : initialState.games).map((game) => ({
+    const games = local.games.map((game) => ({
       ...game,
       isCompleted: Boolean(game.isCompleted),
     }));
     const activeGameId = games.some((g) => g.id === local.activeGameId)
       ? local.activeGameId
-      : games[0].id;
+      : games[0]?.id || null;
     const gameDataById = {};
     for (const game of games) {
       const raw = local.gameDataById?.[game.id] || {};
@@ -188,6 +178,7 @@ export default function App() {
   const [showOptionsBar, setShowOptionsBar] = useState(false);
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [draftTeamName, setDraftTeamName] = useState("");
+  const [scoreFeedback, setScoreFeedback] = useState(null);
 
   const activeGame =
     state.games.find((game) => game.id === state.activeGameId) || state.games[0] || null;
@@ -247,6 +238,18 @@ export default function App() {
       window.removeEventListener("offline", onOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (!scoreFeedback) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setScoreFeedback(null);
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [scoreFeedback]);
 
   const syncPendingQueue = useCallback(async () => {
     const scopeKey = authSession?.teamScopeKey;
@@ -491,6 +494,7 @@ export default function App() {
     const freshState = buildInitialState(null);
     setState(freshState);
     saveGameState(authSession?.teamScopeKey, freshState);
+    setScoreFeedback(null);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
     setActivePage("games");
@@ -597,20 +601,11 @@ export default function App() {
 
   function deleteGame(gameId) {
     if (state.games.length === 1) {
-      const replacement = {
-        id: "game-1",
-        name: "Game 1",
-        opponent: "",
-        isCompleted: false,
-        createdAt: new Date().toISOString(),
-      };
       const next = {
         ...state,
-        games: [replacement],
-        activeGameId: replacement.id,
-        gameDataById: {
-          [replacement.id]: createEmptyGameData(),
-        },
+        games: [],
+        activeGameId: null,
+        gameDataById: {},
       };
       updateStateWithQueue(next, {
         type: "GAME_DELETED_AND_RESET",
@@ -883,6 +878,10 @@ export default function App() {
 
     const pointId = createId("pt");
     const pointCreatedAt = new Date().toISOString();
+    const nextScore = buildScoreFromPointResults([
+      ...activeGameData.pointResults,
+      { didWeScore },
+    ]);
 
     const next = {
       ...state,
@@ -901,7 +900,7 @@ export default function App() {
             },
           ],
           pointNumber: activeGameData.pointNumber + 1,
-          currentOnFieldPlayerIds: [],
+          currentOnFieldPlayerIds: activeGameData.currentOnFieldPlayerIds,
         },
       },
     };
@@ -917,9 +916,18 @@ export default function App() {
         createdAt: pointCreatedAt,
       },
     });
+
+    setScoreFeedback({
+      message: didWeScore ? "Point won recorded" : "Point lost recorded",
+      score: `${nextScore.us}-${nextScore.them}`,
+    });
   }
 
   function clearHistory() {
+    if (!activeGameId) {
+      return;
+    }
+
     const confirmed = window.confirm(
       "Clear all game history (stats, points played, and current point selections)?"
     );
@@ -937,6 +945,7 @@ export default function App() {
 
     clearQueue(authSession?.teamScopeKey);
     setSyncQueueSize(0);
+    setScoreFeedback(null);
     setState(next);
   }
 
@@ -958,8 +967,9 @@ export default function App() {
       ),
     };
 
-    clearQueue(authSession?.teamScopeKey);
-    setSyncQueueSize(0);
+    enqueueAction(authSession?.teamScopeKey, { type: "ROSTER_CLEARED", payload: {} });
+    setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
+  setScoreFeedback(null);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
     setState(next);
@@ -1067,12 +1077,30 @@ export default function App() {
     return totals;
   }, [activeGameData.statEvents]);
 
+  const noGameSelectedPanel = (
+    <section className="panel">
+      <h2 className="key-view-title">No Game Selected</h2>
+      <p className="help-text">
+        Create a game on the Games page before recording live stats or viewing a box score.
+      </p>
+      <button type="button" className="secondary-button" onClick={() => setActivePage("games")}>
+        Go to Games
+      </button>
+    </section>
+  );
+
   if (!authSession?.teamScopeKey) {
     return <SignInPage onGoogleCredential={handleGoogleCredential} />;
   }
 
   return (
     <main className="layout">
+      {scoreFeedback ? (
+        <div className="score-feedback-toast" role="status" aria-live="polite">
+          <strong>{scoreFeedback.message}</strong>
+          <span>Score is now {scoreFeedback.score}</span>
+        </div>
+      ) : null}
       <header className="app-header">
         <div>
           <h1>Ultimate Frisbee Box Score Prototype</h1>
@@ -1192,64 +1220,71 @@ export default function App() {
       ) : null}
 
       {activePage === "live-entry" ? (
-        <>
-          <section className="panel lineup-tabs">
-            <h2>Live Entry Filter</h2>
-            <div className="tab-row">
-              {state.lineupGroups.map((lineup) => (
-                <button
-                  key={lineup.id}
-                  className={selectedLiveEntryLineupIds.includes(lineup.id) ? "active-tab" : ""}
-                  onClick={() => toggleLiveEntryLineupFilter(lineup.id)}
-                >
-                  {lineup.name}
-                </button>
-              ))}
-            </div>
-            <p className="help-text">Select one or more lineup groups to filter live entry options.</p>
-          </section>
+        activeGame ? (
+          <>
+            <section className="panel lineup-tabs">
+              <h2>Live Entry Filter</h2>
+              <div className="tab-row">
+                {state.lineupGroups.map((lineup) => (
+                  <button
+                    key={lineup.id}
+                    className={selectedLiveEntryLineupIds.includes(lineup.id) ? "active-tab" : ""}
+                    onClick={() => toggleLiveEntryLineupFilter(lineup.id)}
+                  >
+                    {lineup.name}
+                  </button>
+                ))}
+              </div>
+              <p className="help-text">Select one or more lineup groups to filter live entry options.</p>
+            </section>
 
-          <OnFieldPanel
-            players={liveEntryPlayers}
-            onFieldPlayerIds={activeGameData.currentOnFieldPlayerIds}
-            onToggleOnField={toggleOnField}
-            onRecordStat={recordStat}
-            onDecrementStat={decrementStat}
-            statTotals={liveEntryStatTotals}
-            onUndo={undoLastEvent}
-            onCommitPoint={commitPointAndAdvance}
-            pointNumber={activeGameData.pointNumber}
-          />
+            <OnFieldPanel
+              players={liveEntryPlayers}
+              onFieldPlayerIds={activeGameData.currentOnFieldPlayerIds}
+              onToggleOnField={toggleOnField}
+              onRecordStat={recordStat}
+              onDecrementStat={decrementStat}
+              statTotals={liveEntryStatTotals}
+              onUndo={undoLastEvent}
+              onCommitPoint={commitPointAndAdvance}
+              pointNumber={activeGameData.pointNumber}
+            />
 
-          <section className="panel">
-            <p className="help-text">
-              Live entry options are filtered by lineup groups. Select multiple tabs to combine groups.
-            </p>
-          </section>
-
-        </>
+            <section className="panel">
+              <p className="help-text">
+                Live entry options are filtered by lineup groups. Select multiple tabs to combine groups.
+              </p>
+            </section>
+          </>
+        ) : (
+          noGameSelectedPanel
+        )
       ) : null}
 
       {activePage === "box-score" ? (
-        <>
-          <section className="panel lineup-tabs">
-            <h2>Lineup Tabs</h2>
-            <div className="tab-row">
-              {state.lineupGroups.map((lineup) => (
-                <button
-                  key={lineup.id}
-                  className={selectedBoxScoreLineupIds.includes(lineup.id) ? "active-tab" : ""}
-                  onClick={() => toggleBoxScoreLineupFilter(lineup.id)}
-                >
-                  {lineup.name}
-                </button>
-              ))}
-            </div>
-            <p className="help-text">Select one or more lineup groups to combine box score views.</p>
-          </section>
+        activeGame ? (
+          <>
+            <section className="panel lineup-tabs">
+              <h2>Lineup Tabs</h2>
+              <div className="tab-row">
+                {state.lineupGroups.map((lineup) => (
+                  <button
+                    key={lineup.id}
+                    className={selectedBoxScoreLineupIds.includes(lineup.id) ? "active-tab" : ""}
+                    onClick={() => toggleBoxScoreLineupFilter(lineup.id)}
+                  >
+                    {lineup.name}
+                  </button>
+                ))}
+              </div>
+              <p className="help-text">Select one or more lineup groups to combine box score views.</p>
+            </section>
 
-        <BoxScoreTable rows={rows} activeLineupName={activeLineupName} pointResults={pointResultLog} />
-        </>
+            <BoxScoreTable rows={rows} activeLineupName={activeLineupName} pointResults={pointResultLog} />
+          </>
+        ) : (
+          noGameSelectedPanel
+        )
       ) : null}
     </main>
   );

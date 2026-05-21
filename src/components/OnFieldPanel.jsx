@@ -107,6 +107,7 @@ export function OnFieldPanel({
                       const total = statTotals?.[totalKey] || 0;
                       return (
                     <button
+                      type="button"
                       className={`stat-button ${pressedButtons[`${player.id}:${statType}:inc`] ? "stat-button-pressed" : ""}`}
                       disabled={!isOnField}
                       onClick={() => {
@@ -120,6 +121,7 @@ export function OnFieldPanel({
                       );
                     })()}
                     <button
+                      type="button"
                       className={`stat-button stat-button-decrement ${pressedButtons[`${player.id}:${statType}:dec`] ? "stat-button-decrement-pressed" : ""}`}
                       disabled={!isOnField}
                       onClick={() => {

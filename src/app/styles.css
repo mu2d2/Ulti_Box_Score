@@ -24,6 +24,21 @@ body {
   gap: 12px;
 }
 
+.score-feedback-toast {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #123b2d;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(18, 59, 45, 0.18);
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;

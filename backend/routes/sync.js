@@ -239,15 +239,44 @@ router.post("/", async (req, res) => {
               `DELETE FROM lineup_group_members
                WHERE lineup_group_id IN (
                  SELECT id FROM lineup_groups
-                 WHERE account_id = $1 AND id NOT LIKE 'lineup-%'
+                 WHERE account_id = $1 AND id NOT IN ('lineup-all', 'lineup-o', 'lineup-d')
                )`,
               [accountId]
             );
             await client.query(
               `DELETE FROM lineup_groups
-               WHERE account_id = $1 AND id NOT LIKE 'lineup-%'`,
+               WHERE account_id = $1 AND id NOT IN ('lineup-all', 'lineup-o', 'lineup-d')`,
               [accountId]
             );
+            applied++;
+            break;
+          }
+
+          case "ROSTER_CLEARED": {
+            await client.query(
+              `DELETE FROM stat_events
+               WHERE game_id IN (SELECT id FROM games WHERE account_id = $1)`,
+              [accountId]
+            );
+            await client.query(
+              `DELETE FROM player_points
+               WHERE point_id IN (
+                 SELECT id FROM points WHERE game_id IN (SELECT id FROM games WHERE account_id = $1)
+               )`,
+              [accountId]
+            );
+            await client.query(
+              `DELETE FROM points WHERE game_id IN (SELECT id FROM games WHERE account_id = $1)`,
+              [accountId]
+            );
+            await client.query(`DELETE FROM games WHERE account_id = $1`, [accountId]);
+            await client.query(
+              `DELETE FROM lineup_group_members
+               WHERE lineup_group_id IN (SELECT id FROM lineup_groups WHERE account_id = $1)`,
+              [accountId]
+            );
+            await client.query(`DELETE FROM lineup_groups WHERE account_id = $1`, [accountId]);
+            await client.query(`DELETE FROM players WHERE account_id = $1`, [accountId]);
             applied++;
             break;
           }

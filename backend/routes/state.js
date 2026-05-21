@@ -2,6 +2,12 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { pool } from "../db/pool.js";
 
+const DEFAULT_LINEUP_GROUPS = [
+  { id: "lineup-all", name: "All" },
+  { id: "lineup-o", name: "O-Line" },
+  { id: "lineup-d", name: "D-Line" },
+];
+
 const router = Router();
 router.use(requireAuth);
 
@@ -137,10 +143,11 @@ router.get("/", async (req, res) => {
     }
 
     // ── Lineup groups — always include the virtual "lineup-all" ──────────────
-    const hasLineupAll = groupsResult.rows.some((g) => g.id === "lineup-all");
     const lineupGroups = [
-      ...(hasLineupAll ? [] : [{ id: "lineup-all", name: "All" }]),
-      ...groupsResult.rows.map((g) => ({ id: g.id, name: g.name })),
+      ...DEFAULT_LINEUP_GROUPS,
+      ...groupsResult.rows
+        .filter((g) => !DEFAULT_LINEUP_GROUPS.some((defaultGroup) => defaultGroup.id === g.id))
+        .map((g) => ({ id: g.id, name: g.name })),
     ];
 
     // ── Games list ────────────────────────────────────────────────────────────
