@@ -724,41 +724,22 @@ export default function App() {
   }
 
   function toggleLiveEntryLineupFilter(lineupId) {
+    // Only update the lineup selection. The useEffect watching
+    // liveEntryVisiblePlayerIds handles removing players who are no longer
+    // in the visible group from currentOnFieldPlayerIds — no state mutation
+    // here, no stale-closure reads, no setState inside a setter updater.
     setSelectedLiveEntryLineupIds((current) => {
-      let nextSelection;
       if (lineupId === "lineup-all") {
-        nextSelection = ["lineup-all"];
-      } else {
-        const withoutAll = current.filter((id) => id !== "lineup-all");
-        const isSelected = withoutAll.includes(lineupId);
-        const next = isSelected ? withoutAll.filter((id) => id !== lineupId) : [...withoutAll, lineupId];
-
-        nextSelection = next.length === 0 ? ["lineup-all"] : next;
+        return ["lineup-all"];
       }
 
-      const filteredPlayerIds = getPlayerIdsForLineups(
-        nextSelection,
-        state.players,
-        state.lineupMembership
-      );
+      const withoutAll = current.filter((id) => id !== "lineup-all");
+      const isSelected = withoutAll.includes(lineupId);
+      const next = isSelected
+        ? withoutAll.filter((id) => id !== lineupId)
+        : [...withoutAll, lineupId];
 
-      if (activeGameId) {
-        setState((prev) => {
-          const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
-          return {
-            ...prev,
-            gameDataById: {
-              ...prev.gameDataById,
-              [activeGameId]: {
-                ...currentData,
-                currentOnFieldPlayerIds: filteredPlayerIds.slice(0, 7),
-              },
-            },
-          };
-        });
-      }
-
-      return nextSelection;
+      return next.length === 0 ? ["lineup-all"] : next;
     });
   }
 
@@ -807,192 +788,206 @@ export default function App() {
   }
 
   function recordStat(playerId, statType) {
-    if (!activeGameId) {
+    const gameId = activeGameId;
+    if (!gameId) {
       return;
     }
 
-    let queuedEvent = null;
+    // Pre-validate and pre-compute all event data before touching state.
+    // This avoids side effects inside the setState updater, which is unsafe
+    // in React 18 concurrent mode (updaters may run deferred or twice in StrictMode).
+    const currentData = state.gameDataById[gameId];
+    if (!currentData || !currentData.currentOnFieldPlayerIds.includes(playerId)) {
+      return;
+    }
+
+    const event = {
+      id: createId("evt"),
+      pointNumber: currentData.pointNumber,
+      playerId,
+      statType,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Pure updater: append the pre-built event by its stable ID.
     setState((prev) => {
-      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
-      if (!currentData.currentOnFieldPlayerIds.includes(playerId)) {
-        return prev;
-      }
-
-      const event = {
-        id: createId("evt"),
-        pointNumber: currentData.pointNumber,
-        playerId,
-        statType,
-        createdAt: new Date().toISOString(),
-      };
-      queuedEvent = event;
-
+      const data = prev.gameDataById[gameId] || createEmptyGameData();
       return {
         ...prev,
         gameDataById: {
           ...prev.gameDataById,
-          [activeGameId]: {
-            ...currentData,
-            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
-            statEvents: [...currentData.statEvents, event],
+          [gameId]: {
+            ...data,
+            statEvents: [...data.statEvents, event],
           },
         },
       };
     });
 
-    if (queuedEvent) {
-      queueAction({
-        type: "STAT_EVENT_CREATED",
-        payload: { ...queuedEvent, gameId: activeGameId },
-      });
-    }
+    // Queue synchronously in the same execution context as setState.
+    queueAction({
+      type: "STAT_EVENT_CREATED",
+      payload: { ...event, gameId },
+    });
   }
 
   function decrementStat(playerId, statType) {
-    if (!activeGameId) {
+    const gameId = activeGameId;
+    if (!gameId) {
       return;
     }
 
-    let removedEvent = null;
+    // Pre-validate and locate the event to remove before touching state.
+    const currentData = state.gameDataById[gameId];
+    if (!currentData || !currentData.currentOnFieldPlayerIds.includes(playerId)) {
+      return;
+    }
+
+    let targetEvent = null;
+    for (let i = currentData.statEvents.length - 1; i >= 0; i -= 1) {
+      const evt = currentData.statEvents[i];
+      if (
+        evt.playerId === playerId &&
+        evt.statType === statType &&
+        evt.pointNumber === currentData.pointNumber
+      ) {
+        targetEvent = evt;
+        break;
+      }
+    }
+
+    if (!targetEvent) {
+      return;
+    }
+
+    const removedEventId = targetEvent.id;
+
+    // Pure updater: remove by stable event ID so React can safely re-run it.
     setState((prev) => {
-      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
-      if (!currentData.currentOnFieldPlayerIds.includes(playerId)) {
+      const data = prev.gameDataById[gameId] || createEmptyGameData();
+      const idx = data.statEvents.findIndex((e) => e.id === removedEventId);
+      if (idx === -1) {
         return prev;
       }
-
-      let targetIndex = -1;
-      for (let i = currentData.statEvents.length - 1; i >= 0; i -= 1) {
-        const event = currentData.statEvents[i];
-        if (
-          event.playerId === playerId &&
-          event.statType === statType &&
-          event.pointNumber === currentData.pointNumber
-        ) {
-          targetIndex = i;
-          break;
-        }
-      }
-
-      if (targetIndex === -1) {
-        return prev;
-      }
-
-      removedEvent = currentData.statEvents[targetIndex];
       return {
         ...prev,
         gameDataById: {
           ...prev.gameDataById,
-          [activeGameId]: {
-            ...currentData,
-            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
-            statEvents: currentData.statEvents.filter((_, idx) => idx !== targetIndex),
+          [gameId]: {
+            ...data,
+            statEvents: data.statEvents.filter((_, i) => i !== idx),
           },
         },
       };
     });
 
-    if (removedEvent) {
-      queueAction({
-        type: "STAT_EVENT_DECREMENTED",
-        payload: { eventId: removedEvent.id, playerId, statType },
-      });
-    }
+    queueAction({
+      type: "STAT_EVENT_DECREMENTED",
+      payload: { eventId: removedEventId, playerId, statType },
+    });
   }
 
   function undoLastEvent() {
-    if (!activeGameId) {
+    const gameId = activeGameId;
+    if (!gameId) {
       return;
     }
 
-    let lastEventId = null;
+    // Pre-read the last event before touching state.
+    const currentData = state.gameDataById[gameId];
+    if (!currentData) {
+      return;
+    }
+
+    const lastEvent = currentData.statEvents[currentData.statEvents.length - 1];
+    if (!lastEvent) {
+      return;
+    }
+
+    const lastEventId = lastEvent.id;
+
+    // Pure updater: remove by stable event ID.
     setState((prev) => {
-      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
-      const last = currentData.statEvents[currentData.statEvents.length - 1];
-      if (!last) {
+      const data = prev.gameDataById[gameId] || createEmptyGameData();
+      const idx = data.statEvents.findIndex((e) => e.id === lastEventId);
+      if (idx === -1) {
         return prev;
       }
-
-      lastEventId = last.id;
       return {
         ...prev,
         gameDataById: {
           ...prev.gameDataById,
-          [activeGameId]: {
-            ...currentData,
-            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
-            statEvents: currentData.statEvents.slice(0, -1),
+          [gameId]: {
+            ...data,
+            statEvents: data.statEvents.filter((_, i) => i !== idx),
           },
         },
       };
     });
 
-    if (lastEventId) {
-      queueAction({
-        type: "STAT_EVENT_UNDONE",
-        payload: { eventId: lastEventId },
-      });
-    }
+    queueAction({
+      type: "STAT_EVENT_UNDONE",
+      payload: { eventId: lastEventId },
+    });
   }
 
   function commitPointAndAdvance(didWeScore) {
-    if (!activeGameId) {
+    const gameId = activeGameId;
+    if (!gameId) {
       return;
     }
 
-    let queuedPointPayload = null;
-    let nextScore = null;
+    // Pre-validate and pre-compute all point data before touching state,
+    // following the same safe pattern as recordStat/decrementStat/undoLastEvent.
+    const currentData = state.gameDataById[gameId];
+    if (!currentData || currentData.currentOnFieldPlayerIds.length !== 7) {
+      return;
+    }
+
+    const pointId = createId("pt");
+    const pointCreatedAt = new Date().toISOString();
+    const pointResult = {
+      id: pointId,
+      pointNumber: currentData.pointNumber,
+      didWeScore,
+      createdAt: pointCreatedAt,
+    };
+
+    const nextCounts = { ...currentData.playerPointsPlayed };
+    for (const playerId of currentData.currentOnFieldPlayerIds) {
+      nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
+    }
+
+    const pointPayload = {
+      gameId,
+      pointId,
+      pointNumber: currentData.pointNumber,
+      didWeScore,
+      playerIds: currentData.currentOnFieldPlayerIds,
+      createdAt: pointCreatedAt,
+    };
+    const nextScore = buildScoreFromPointResults([...currentData.pointResults, pointResult]);
+
+    // Pure updater: apply the pre-computed point result and counts.
     setState((prev) => {
-      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
-      if (currentData.currentOnFieldPlayerIds.length !== 7) {
-        return prev;
-      }
-
-      const nextCounts = { ...currentData.playerPointsPlayed };
-      for (const playerId of currentData.currentOnFieldPlayerIds) {
-        nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
-      }
-
-      const pointId = createId("pt");
-      const pointCreatedAt = new Date().toISOString();
-      const pointResult = {
-        id: pointId,
-        pointNumber: currentData.pointNumber,
-        didWeScore,
-        createdAt: pointCreatedAt,
-      };
-
-      queuedPointPayload = {
-        gameId: activeGameId,
-        pointId,
-        pointNumber: currentData.pointNumber,
-        didWeScore,
-        playerIds: currentData.currentOnFieldPlayerIds,
-        createdAt: pointCreatedAt,
-      };
-      nextScore = buildScoreFromPointResults([...currentData.pointResults, pointResult]);
-
+      const data = prev.gameDataById[gameId] || createEmptyGameData();
       return {
         ...prev,
         gameDataById: {
           ...prev.gameDataById,
-          [activeGameId]: {
-            ...currentData,
+          [gameId]: {
+            ...data,
             playerPointsPlayed: nextCounts,
-            pointResults: [...currentData.pointResults, pointResult],
-            pointNumber: currentData.pointNumber + 1,
-            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
+            pointResults: [...data.pointResults, pointResult],
+            pointNumber: data.pointNumber + 1,
           },
         },
       };
     });
 
-    if (!queuedPointPayload || !nextScore) {
-      return;
-    }
-
     queueAction({
       type: "POINT_COMMITTED",
-      payload: queuedPointPayload,
+      payload: pointPayload,
     });
 
     setScoreFeedback({
@@ -1048,7 +1043,7 @@ export default function App() {
 
     enqueueAction(authSession?.teamScopeKey, { type: "ROSTER_CLEARED", payload: {} });
     setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
-  setScoreFeedback(null);
+    setScoreFeedback(null);
     setSelectedLiveEntryLineupIds(["lineup-all"]);
     setSelectedBoxScoreLineupIds(["lineup-all"]);
     setState(next);
