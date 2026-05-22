@@ -27,3 +27,13 @@ export function enqueueAction(scopeKey, action) {
 export function clearQueue(scopeKey) {
   window.localStorage.setItem(toQueueKey(scopeKey), JSON.stringify([]));
 }
+
+export function removeQueuedActions(scopeKey, count) {
+  if (!count || count <= 0) {
+    return;
+  }
+
+  const queue = readQueue(scopeKey);
+  const nextQueue = queue.slice(count);
+  window.localStorage.setItem(toQueueKey(scopeKey), JSON.stringify(nextQueue));
+}

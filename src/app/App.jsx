@@ -7,7 +7,7 @@ import { initialState } from "../models/initialState";
 import { DEFAULT_LINEUP_GROUPS } from "../models/types";
 import { createId } from "../utils/id";
 import { buildBoxScore } from "../utils/stats";
-import { clearQueue, enqueueAction, readQueue } from "../services/localQueue";
+import { clearQueue, enqueueAction, readQueue, removeQueuedActions } from "../services/localQueue";
 import { loadGameState, saveGameState } from "../services/gameStore";
 import {
   clearAuthSession,
@@ -168,6 +168,29 @@ function buildInitialState(local) {
   };
 }
 
+function mergeHydratedStateWithLocalInProgress(hydratedState, localState) {
+  const mergedGameDataById = { ...hydratedState.gameDataById };
+
+  for (const [gameId, hydratedGameData] of Object.entries(hydratedState.gameDataById || {})) {
+    const localGameData = localState.gameDataById?.[gameId];
+    if (!localGameData) {
+      continue;
+    }
+
+    mergedGameDataById[gameId] = {
+      ...hydratedGameData,
+      currentOnFieldPlayerIds: Array.isArray(localGameData.currentOnFieldPlayerIds)
+        ? localGameData.currentOnFieldPlayerIds
+        : [],
+    };
+  }
+
+  return {
+    ...hydratedState,
+    gameDataById: mergedGameDataById,
+  };
+}
+
 export default function App() {
   const [authSession, setAuthSession] = useState(() => {
     const session = loadAuthSession();
@@ -271,18 +294,21 @@ export default function App() {
 
     setIsSyncingQueue(true);
     try {
-      await apiClient.sync(pending);
-      clearQueue(scopeKey);
-      setSyncQueueSize(0);
+      const syncResult = await apiClient.sync(pending);
+      removeQueuedActions(scopeKey, pending.length);
+      setSyncQueueSize(readQueue(scopeKey).length);
       // Re-hydrate from server after a successful flush so the UI reflects
       // any data that was committed for the first time (e.g. games created
       // while offline that are now in the DB).
       apiClient.getState().then((serverState) => {
         if (!serverState) return;
         const hydrated = buildInitialState(serverState);
-        setState(hydrated);
+        setState((prev) => mergeHydratedStateWithLocalInProgress(hydrated, prev));
         saveGameState(scopeKey, serverState);
       }).catch(() => {});
+      if (syncResult?.skipped > 0) {
+        setSyncQueueSize(readQueue(scopeKey).length);
+      }
       return true;
     } catch {
       return false;
