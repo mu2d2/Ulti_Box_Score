@@ -34,9 +34,21 @@ body {
   gap: 12px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: #123b2d;
+  background: #f4f8f6;
+  color: #122116;
+  box-shadow: 0 12px 24px rgba(18, 59, 45, 0.12);
+}
+
+.score-feedback-toast-won {
+  background: #b7efc5;
+  color: #0f5132;
+  box-shadow: 0 12px 24px rgba(64, 145, 108, 0.22);
+}
+
+.score-feedback-toast-lost {
+  background: #b42318;
   color: #ffffff;
-  box-shadow: 0 12px 24px rgba(18, 59, 45, 0.18);
+  box-shadow: 0 12px 24px rgba(180, 35, 24, 0.28);
 }
 
 .app-header {

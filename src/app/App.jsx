@@ -76,15 +76,21 @@ function buildInitialState(local) {
   }
 
   const players = Array.isArray(local.players) ? local.players : [];
-  const lineupGroups =
-    Array.isArray(local.lineupGroups) && local.lineupGroups.length > 0
-      ? [
-          ...DEFAULT_LINEUP_GROUPS,
-          ...local.lineupGroups.filter(
-            (group) => !DEFAULT_LINEUP_GROUPS.some((defaultGroup) => defaultGroup.id === group.id)
-          ),
-        ]
-      : DEFAULT_LINEUP_GROUPS;
+  const localLineupGroups = Array.isArray(local.lineupGroups) ? local.lineupGroups : [];
+  const localLineupNamesById = Object.fromEntries(
+    localLineupGroups
+      .filter((group) => group && group.id)
+      .map((group) => [group.id, group.name])
+  );
+  const lineupGroups = [
+    ...DEFAULT_LINEUP_GROUPS.map((group) => ({
+      ...group,
+      name: localLineupNamesById[group.id] || group.name,
+    })),
+    ...localLineupGroups.filter(
+      (group) => !DEFAULT_LINEUP_GROUPS.some((defaultGroup) => defaultGroup.id === group.id)
+    ),
+  ];
   const lineupMembership =
     local.lineupMembership && typeof local.lineupMembership === "object"
       ? local.lineupMembership
@@ -387,6 +393,11 @@ export default function App() {
 
   function updateStateWithQueue(nextState, action) {
     setState(nextState);
+    enqueueAction(authSession?.teamScopeKey, action);
+    setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
+  }
+
+  function queueAction(action) {
     enqueueAction(authSession?.teamScopeKey, action);
     setSyncQueueSize(readQueue(authSession?.teamScopeKey).length);
   }
@@ -770,73 +781,96 @@ export default function App() {
   }
 
   function recordStat(playerId, statType) {
-    if (!activeGameId || !activeGameData.currentOnFieldPlayerIds.includes(playerId)) {
+    if (!activeGameId) {
       return;
     }
 
-    const event = {
-      id: createId("evt"),
-      pointNumber: activeGameData.pointNumber,
-      playerId,
-      statType,
-      createdAt: new Date().toISOString(),
-    };
+    let queuedEvent = null;
+    setState((prev) => {
+      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+      if (!currentData.currentOnFieldPlayerIds.includes(playerId)) {
+        return prev;
+      }
 
-    const next = {
-      ...state,
-      gameDataById: {
-        ...state.gameDataById,
-        [activeGameId]: {
-          ...activeGameData,
-          statEvents: [...activeGameData.statEvents, event],
+      const event = {
+        id: createId("evt"),
+        pointNumber: currentData.pointNumber,
+        playerId,
+        statType,
+        createdAt: new Date().toISOString(),
+      };
+      queuedEvent = event;
+
+      return {
+        ...prev,
+        gameDataById: {
+          ...prev.gameDataById,
+          [activeGameId]: {
+            ...currentData,
+            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
+            statEvents: [...currentData.statEvents, event],
+          },
         },
-      },
-    };
-
-    updateStateWithQueue(next, {
-      type: "STAT_EVENT_CREATED",
-      payload: { ...event, gameId: activeGameId },
+      };
     });
+
+    if (queuedEvent) {
+      queueAction({
+        type: "STAT_EVENT_CREATED",
+        payload: { ...queuedEvent, gameId: activeGameId },
+      });
+    }
   }
 
   function decrementStat(playerId, statType) {
-    if (!activeGameId || !activeGameData.currentOnFieldPlayerIds.includes(playerId)) {
+    if (!activeGameId) {
       return;
     }
 
-    let targetIndex = -1;
-    for (let i = activeGameData.statEvents.length - 1; i >= 0; i -= 1) {
-      const event = activeGameData.statEvents[i];
-      if (
-        event.playerId === playerId &&
-        event.statType === statType &&
-        event.pointNumber === activeGameData.pointNumber
-      ) {
-        targetIndex = i;
-        break;
+    let removedEvent = null;
+    setState((prev) => {
+      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+      if (!currentData.currentOnFieldPlayerIds.includes(playerId)) {
+        return prev;
       }
-    }
 
-    if (targetIndex === -1) {
-      return;
-    }
+      let targetIndex = -1;
+      for (let i = currentData.statEvents.length - 1; i >= 0; i -= 1) {
+        const event = currentData.statEvents[i];
+        if (
+          event.playerId === playerId &&
+          event.statType === statType &&
+          event.pointNumber === currentData.pointNumber
+        ) {
+          targetIndex = i;
+          break;
+        }
+      }
 
-    const removedEvent = activeGameData.statEvents[targetIndex];
-    const next = {
-      ...state,
-      gameDataById: {
-        ...state.gameDataById,
-        [activeGameId]: {
-          ...activeGameData,
-          statEvents: activeGameData.statEvents.filter((_, idx) => idx !== targetIndex),
+      if (targetIndex === -1) {
+        return prev;
+      }
+
+      removedEvent = currentData.statEvents[targetIndex];
+      return {
+        ...prev,
+        gameDataById: {
+          ...prev.gameDataById,
+          [activeGameId]: {
+            ...currentData,
+            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
+            statEvents: currentData.statEvents.filter((_, idx) => idx !== targetIndex),
+          },
         },
-      },
-    };
-
-    updateStateWithQueue(next, {
-      type: "STAT_EVENT_DECREMENTED",
-      payload: { eventId: removedEvent.id, playerId, statType },
+      };
     });
+
+    if (removedEvent) {
+      queueAction({
+        type: "STAT_EVENT_DECREMENTED",
+        payload: { eventId: removedEvent.id, playerId, statType },
+      });
+    }
   }
 
   function undoLastEvent() {
@@ -844,82 +878,101 @@ export default function App() {
       return;
     }
 
-    const last = activeGameData.statEvents[activeGameData.statEvents.length - 1];
-    if (!last) {
-      return;
-    }
+    let lastEventId = null;
+    setState((prev) => {
+      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+      const last = currentData.statEvents[currentData.statEvents.length - 1];
+      if (!last) {
+        return prev;
+      }
 
-    const next = {
-      ...state,
-      gameDataById: {
-        ...state.gameDataById,
-        [activeGameId]: {
-          ...activeGameData,
-          statEvents: activeGameData.statEvents.slice(0, -1),
+      lastEventId = last.id;
+      return {
+        ...prev,
+        gameDataById: {
+          ...prev.gameDataById,
+          [activeGameId]: {
+            ...currentData,
+            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
+            statEvents: currentData.statEvents.slice(0, -1),
+          },
         },
-      },
-    };
-
-    updateStateWithQueue(next, {
-      type: "STAT_EVENT_UNDONE",
-      payload: { eventId: last.id },
+      };
     });
+
+    if (lastEventId) {
+      queueAction({
+        type: "STAT_EVENT_UNDONE",
+        payload: { eventId: lastEventId },
+      });
+    }
   }
 
   function commitPointAndAdvance(didWeScore) {
-    if (!activeGameId || activeGameData.currentOnFieldPlayerIds.length !== 7) {
+    if (!activeGameId) {
       return;
     }
 
-    const nextCounts = { ...activeGameData.playerPointsPlayed };
-    for (const playerId of activeGameData.currentOnFieldPlayerIds) {
-      nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
-    }
+    let queuedPointPayload = null;
+    let nextScore = null;
+    setState((prev) => {
+      const currentData = prev.gameDataById[activeGameId] || createEmptyGameData();
+      if (currentData.currentOnFieldPlayerIds.length !== 7) {
+        return prev;
+      }
 
-    const pointId = createId("pt");
-    const pointCreatedAt = new Date().toISOString();
-    const nextScore = buildScoreFromPointResults([
-      ...activeGameData.pointResults,
-      { didWeScore },
-    ]);
+      const nextCounts = { ...currentData.playerPointsPlayed };
+      for (const playerId of currentData.currentOnFieldPlayerIds) {
+        nextCounts[playerId] = (nextCounts[playerId] || 0) + 1;
+      }
 
-    const next = {
-      ...state,
-      gameDataById: {
-        ...state.gameDataById,
-        [activeGameId]: {
-          ...activeGameData,
-          playerPointsPlayed: nextCounts,
-          pointResults: [
-            ...activeGameData.pointResults,
-            {
-              id: pointId,
-              pointNumber: activeGameData.pointNumber,
-              didWeScore,
-              createdAt: pointCreatedAt,
-            },
-          ],
-          pointNumber: activeGameData.pointNumber + 1,
-          currentOnFieldPlayerIds: activeGameData.currentOnFieldPlayerIds,
-        },
-      },
-    };
+      const pointId = createId("pt");
+      const pointCreatedAt = new Date().toISOString();
+      const pointResult = {
+        id: pointId,
+        pointNumber: currentData.pointNumber,
+        didWeScore,
+        createdAt: pointCreatedAt,
+      };
 
-    updateStateWithQueue(next, {
-      type: "POINT_COMMITTED",
-      payload: {
+      queuedPointPayload = {
         gameId: activeGameId,
         pointId,
-        pointNumber: activeGameData.pointNumber,
+        pointNumber: currentData.pointNumber,
         didWeScore,
-        playerIds: activeGameData.currentOnFieldPlayerIds,
+        playerIds: currentData.currentOnFieldPlayerIds,
         createdAt: pointCreatedAt,
-      },
+      };
+      nextScore = buildScoreFromPointResults([...currentData.pointResults, pointResult]);
+
+      return {
+        ...prev,
+        gameDataById: {
+          ...prev.gameDataById,
+          [activeGameId]: {
+            ...currentData,
+            playerPointsPlayed: nextCounts,
+            pointResults: [...currentData.pointResults, pointResult],
+            pointNumber: currentData.pointNumber + 1,
+            currentOnFieldPlayerIds: [...currentData.currentOnFieldPlayerIds],
+          },
+        },
+      };
+    });
+
+    if (!queuedPointPayload || !nextScore) {
+      return;
+    }
+
+    queueAction({
+      type: "POINT_COMMITTED",
+      payload: queuedPointPayload,
     });
 
     setScoreFeedback({
       message: didWeScore ? "Point won recorded" : "Point lost recorded",
       score: `${nextScore.us}-${nextScore.them}`,
+      tone: didWeScore ? "won" : "lost",
     });
   }
 
@@ -1096,7 +1149,11 @@ export default function App() {
   return (
     <main className="layout">
       {scoreFeedback ? (
-        <div className="score-feedback-toast" role="status" aria-live="polite">
+        <div
+          className={`score-feedback-toast ${scoreFeedback.tone === "won" ? "score-feedback-toast-won" : "score-feedback-toast-lost"}`}
+          role="status"
+          aria-live="polite"
+        >
           <strong>{scoreFeedback.message}</strong>
           <span>Score is now {scoreFeedback.score}</span>
         </div>

@@ -38,6 +38,10 @@ export function RosterPanel({
   const [lineupEditPlayers, setLineupEditPlayers] = useState([]);
   const [expandedLineupGroups, setExpandedLineupGroups] = useState({});
 
+  function sanitizeIntegerInput(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
 
@@ -48,7 +52,7 @@ export function RosterPanel({
     onAddPlayer({
       id: createId("player"),
       name: form.name.trim(),
-      jerseyNumber: form.jerseyNumber.trim(),
+      jerseyNumber: sanitizeIntegerInput(form.jerseyNumber),
       position: form.position.trim(),
       role: form.role,
       age: form.age ? Number(form.age) : null,
@@ -88,7 +92,7 @@ export function RosterPanel({
 
     onUpdatePlayer(playerId, {
       name: editForm.name.trim(),
-      jerseyNumber: editForm.jerseyNumber.trim(),
+      jerseyNumber: sanitizeIntegerInput(editForm.jerseyNumber),
       position: editForm.position,
       role: editForm.role,
       age: editForm.age === "" ? null : Number(editForm.age),
@@ -204,9 +208,16 @@ export function RosterPanel({
         <input
           className="roster-aux-field"
           placeholder="Jersey #"
+          type="number"
+          min="0"
+          step="1"
+          inputMode="numeric"
           value={form.jerseyNumber}
           onChange={(event) =>
-            setForm((prev) => ({ ...prev, jerseyNumber: event.target.value }))
+            setForm((prev) => ({
+              ...prev,
+              jerseyNumber: sanitizeIntegerInput(event.target.value),
+            }))
           }
         />
         <label className="required-field">
@@ -280,9 +291,16 @@ export function RosterPanel({
                 />
                 <input
                   className="inline-edit-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
                   value={editForm.jerseyNumber}
                   onChange={(event) =>
-                    setEditForm((prev) => ({ ...prev, jerseyNumber: event.target.value }))
+                    setEditForm((prev) => ({
+                      ...prev,
+                      jerseyNumber: sanitizeIntegerInput(event.target.value),
+                    }))
                   }
                   placeholder="Jersey #"
                 />

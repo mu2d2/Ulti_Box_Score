@@ -143,8 +143,14 @@ router.get("/", async (req, res) => {
     }
 
     // ── Lineup groups — always include the virtual "lineup-all" ──────────────
+    const persistedLineupNamesById = Object.fromEntries(
+      groupsResult.rows.map((g) => [g.id, g.name])
+    );
     const lineupGroups = [
-      ...DEFAULT_LINEUP_GROUPS,
+      ...DEFAULT_LINEUP_GROUPS.map((group) => ({
+        ...group,
+        name: persistedLineupNamesById[group.id] || group.name,
+      })),
       ...groupsResult.rows
         .filter((g) => !DEFAULT_LINEUP_GROUPS.some((defaultGroup) => defaultGroup.id === g.id))
         .map((g) => ({ id: g.id, name: g.name })),

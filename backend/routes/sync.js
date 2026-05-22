@@ -96,9 +96,11 @@ router.post("/", async (req, res) => {
           case "LINEUP_GROUP_UPDATED": {
             const { lineupId, name, playerIds = [] } = payload;
             await client.query(
-              `UPDATE lineup_groups SET name = $1, updated_at = NOW()
-               WHERE id = $2 AND account_id = $3`,
-              [name, lineupId, accountId]
+              `INSERT INTO lineup_groups (id, account_id, name)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (id) DO UPDATE
+               SET name = EXCLUDED.name, updated_at = NOW()`,
+              [lineupId, accountId, name]
             );
             await client.query(
               "DELETE FROM lineup_group_members WHERE lineup_group_id = $1",
