@@ -3,10 +3,12 @@ import { RosterPanel } from "../components/RosterPanel";
 import { GamesPanel } from "../components/GamesPanel";
 import { OnFieldPanel } from "../components/OnFieldPanel";
 import { BoxScoreTable } from "../components/BoxScoreTable";
+import { PointCommitPopup } from "../components/PointCommitPopup";
 import { initialState } from "../models/initialState";
 import { DEFAULT_LINEUP_GROUPS } from "../models/types";
 import { createId } from "../utils/id";
 import { buildBoxScore } from "../utils/stats";
+import { validatePointCommit } from "../utils/pointValidator";
 import { clearQueue, enqueueAction, readQueue, removeQueuedActions } from "../services/localQueue";
 import { loadGameState, saveGameState } from "../services/gameStore";
 import {
@@ -208,6 +210,7 @@ export default function App() {
   const [isEditingTeamName, setIsEditingTeamName] = useState(false);
   const [draftTeamName, setDraftTeamName] = useState("");
   const [scoreFeedback, setScoreFeedback] = useState(null);
+  const [pointCommitPopup, setPointCommitPopup] = useState(null);
 
   const activeGame =
     state.games.find((game) => game.id === state.activeGameId) || state.games[0] || null;
@@ -944,6 +947,18 @@ export default function App() {
       return;
     }
 
+    // Validate goal/assist counts for the current point — isolated via pointValidator.
+    const { valid, errors } = validatePointCommit(
+      currentData.statEvents,
+      currentData.pointNumber,
+      currentData.currentOnFieldPlayerIds
+    );
+
+    if (!valid) {
+      setPointCommitPopup({ type: "error", didWeScore, errors });
+      return;
+    }
+
     const pointId = createId("pt");
     const pointCreatedAt = new Date().toISOString();
     const pointResult = {
@@ -990,10 +1005,11 @@ export default function App() {
       payload: pointPayload,
     });
 
-    setScoreFeedback({
-      message: didWeScore ? "Point won recorded" : "Point lost recorded",
+    // Show success popup with the updated score.
+    setPointCommitPopup({
+      type: "success",
+      didWeScore,
       score: `${nextScore.us}-${nextScore.them}`,
-      tone: didWeScore ? "won" : "lost",
     });
   }
 
@@ -1169,6 +1185,24 @@ export default function App() {
 
   return (
     <main className="layout">
+      {pointCommitPopup ? (
+        <PointCommitPopup
+          type={pointCommitPopup.type}
+          title={
+            pointCommitPopup.type === "error"
+              ? "Invalid Point Selection"
+              : pointCommitPopup.didWeScore
+              ? "Point Won! 🎉"
+              : "Point Lost"
+          }
+          lines={
+            pointCommitPopup.type === "error"
+              ? pointCommitPopup.errors
+              : [`Updated score: ${pointCommitPopup.score}`]
+          }
+          onClose={() => setPointCommitPopup(null)}
+        />
+      ) : null}
       {scoreFeedback ? (
         <div
           className={`score-feedback-toast ${scoreFeedback.tone === "won" ? "score-feedback-toast-won" : "score-feedback-toast-lost"}`}
