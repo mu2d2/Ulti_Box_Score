@@ -51,6 +51,92 @@ body {
   box-shadow: 0 12px 24px rgba(180, 35, 24, 0.28);
 }
 
+/* ── Point commit popup ─────────────────────────────────────────────────── */
+
+.point-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 30, 18, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.point-popup-card {
+  width: min(420px, 92vw);
+  border-radius: 16px;
+  padding: 28px 28px 22px;
+  box-shadow: 0 20px 48px rgba(10, 30, 18, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fff;
+}
+
+.point-popup-card-success {
+  border-top: 5px solid #40916c;
+}
+
+.point-popup-card-error {
+  border-top: 5px solid #b42318;
+}
+
+.point-popup-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.point-popup-card-success .point-popup-title {
+  color: #1b5e20;
+}
+
+.point-popup-card-error .point-popup-title {
+  color: #8c1c13;
+}
+
+.point-popup-lines {
+  margin: 0;
+  padding: 0 0 0 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 1rem;
+}
+
+.point-popup-close {
+  align-self: flex-end;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.97rem;
+  transition: background-color 120ms ease;
+}
+
+.point-popup-card-success .point-popup-close {
+  background: #d8f3dc;
+  color: #081c15;
+}
+
+.point-popup-card-success .point-popup-close:hover {
+  background: #52b788;
+  color: #fff;
+}
+
+.point-popup-card-error .point-popup-close {
+  background: #ffe3e3;
+  color: #8c1c13;
+}
+
+.point-popup-card-error .point-popup-close:hover {
+  background: #b42318;
+  color: #fff;
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;
